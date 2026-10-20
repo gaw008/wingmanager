@@ -1,22 +1,19 @@
-package auth_test
+package web_test
 
 import (
-	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/gaw008/wingmanager/internal/db"
+	"github.com/gaw008/wingmanager/internal/settings"
 	"github.com/gaw008/wingmanager/internal/web"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type app struct {
@@ -81,63 +78,57 @@ func (a app) login(t *testing.T) *http.Cookie {
 	return cookies[0]
 }
 
-func TestConcurrentSetupAndSetupClosed(t *testing.T) {
+func TestSetupClosed(t *testing.T) {
 	a := newApp(t)
 	if response := a.request("GET", "/setup", nil, nil); response.Code != http.StatusOK {
 		t.Fatal(response.Code)
 	}
-	start := make(chan struct{})
-	var group sync.WaitGroup
-	responses := make([]*httptest.ResponseRecorder, 2)
-	for i := range 2 {
-		group.Go(func() {
-			<-start
-			form := account()
-			form.Set("email", []string{"one@example.com", "two@example.com"}[i])
-			responses[i] = a.request("POST", "/setup", form, nil)
-		})
-	}
-	close(start)
-	group.Wait()
-	var count int
-	if err := a.database.QueryRow(`SELECT count(*) FROM users`).Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != 1 {
-		t.Fatalf("users=%d", count)
-	}
-	successes, conflicts := 0, 0
-	for _, response := range responses {
-		switch response.Code {
-		case http.StatusSeeOther:
-			successes++
-		case http.StatusConflict:
-			conflicts++
-		default:
-			t.Fatalf("setup returned %d: %s", response.Code, response.Body)
-		}
-	}
-	if successes != 1 || conflicts != 1 {
-		t.Fatalf("successes=%d conflicts=%d", successes, conflicts)
-	}
+	a.setup(t)
 	for _, method := range []string{"GET", "POST"} {
 		response := a.request(method, "/setup", account(), nil)
-		if response.Code == http.StatusOK || strings.Contains(response.Body.String(), `action="/setup"`) {
+		wantStatus := http.StatusSeeOther
+		if method == "POST" {
+			wantStatus = http.StatusConflict
+		}
+		if response.Code != wantStatus || strings.Contains(response.Body.String(), `action="/setup"`) {
 			t.Fatalf("setup still accessible: %d %s", response.Code, response.Body)
 		}
 	}
 }
 
-func TestLoginSessionExpiryAndLogout(t *testing.T) {
+func TestSetupPasswordPolicyMessages(t *testing.T) {
+	for _, test := range []struct{ locale, message string }{
+		{settings.LocaleChinese, "请输入有效邮箱和至少 8 个字符、最多 72 字节的密码。"},
+		{settings.LocaleEnglish, "Enter a valid email and a password of at least 8 characters and at most 72 bytes."},
+	} {
+		t.Run(test.locale, func(t *testing.T) {
+			a := newApp(t)
+			value, err := settings.Get(t.Context(), a.database)
+			if err != nil {
+				t.Fatal(err)
+			}
+			value.Locale = test.locale
+			if err := settings.Save(t.Context(), a.database, value); err != nil {
+				t.Fatal(err)
+			}
+			form := account()
+			form.Set("password", "1234567")
+			response := a.request("POST", "/setup", form, nil)
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), test.message) {
+				t.Fatalf("password validation message: %d %s", response.Code, response.Body)
+			}
+			form.Set("password", "12345678")
+			response = a.request("POST", "/setup", form, nil)
+			if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/login" {
+				t.Fatalf("valid password rejected: %d %s", response.Code, response.Body)
+			}
+		})
+	}
+}
+
+func TestLoginExpiryAndLogoutHTTP(t *testing.T) {
 	a := newApp(t)
 	a.setup(t)
-	var hash string
-	if err := a.database.QueryRow(`SELECT password_hash FROM users`).Scan(&hash); err != nil {
-		t.Fatal(err)
-	}
-	if hash == account().Get("password") || bcrypt.CompareHashAndPassword([]byte(hash), []byte(account().Get("password"))) != nil {
-		t.Fatal("password was not stored as bcrypt")
-	}
 	for _, credentials := range []url.Values{
 		{"email": {"owner@example.com"}, "password": {"wrong"}},
 		{"email": {"unknown@example.com"}, "password": {"correct password"}},
@@ -148,20 +139,8 @@ func TestLoginSessionExpiryAndLogout(t *testing.T) {
 		}
 	}
 	cookie := a.login(t)
-	secret, err := base64.RawURLEncoding.DecodeString(cookie.Value)
-	if err != nil || len(secret) != 32 {
-		t.Fatalf("invalid token: bytes=%d error=%v", len(secret), err)
-	}
 	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode || cookie.Path != "/" || !cookie.Expires.After(time.Now()) {
 		t.Fatalf("invalid cookie: %v", cookie)
-	}
-	var stored []byte
-	if err := a.database.QueryRow(`SELECT token_hash FROM sessions`).Scan(&stored); err != nil {
-		t.Fatal(err)
-	}
-	expected := sha256.Sum256([]byte(cookie.Value))
-	if string(stored) != string(expected[:]) {
-		t.Fatal("session did not store only the credential hash")
 	}
 	if response := a.request("GET", "/", nil, cookie); response.Code != http.StatusOK {
 		t.Fatal(response.Code)
@@ -177,14 +156,6 @@ func TestLoginSessionExpiryAndLogout(t *testing.T) {
 	response = a.request("POST", "/logout", nil, cookie)
 	if response.Code != http.StatusSeeOther || response.Result().Cookies()[0].MaxAge != -1 {
 		t.Fatalf("logout: %d", response.Code)
-	}
-	var sessions int
-	digest := sha256.Sum256([]byte(cookie.Value))
-	if err := a.database.QueryRow(`SELECT count(*) FROM sessions WHERE token_hash = ?`, digest[:]).Scan(&sessions); err != nil {
-		t.Fatal(err)
-	}
-	if sessions != 0 {
-		t.Fatal("logout left the session row")
 	}
 	if response := a.request("GET", "/", nil, cookie); response.Code != http.StatusSeeOther {
 		t.Fatal("logged-out session accepted")

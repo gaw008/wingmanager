@@ -9,10 +9,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gaw008/wingmanager/internal/db"
 	"github.com/gaw008/wingmanager/internal/web"
 )
+
+// readHeaderTimeout bounds how long a slow client can occupy a connection before sending headers.
+const readHeaderTimeout = 5 * time.Second
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -52,5 +56,6 @@ func run(args []string) error {
 		return err
 	}
 	log.Printf("wingmanager listening on http://%s", *addr)
-	return http.ListenAndServe(*addr, handler)
+	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: readHeaderTimeout}
+	return server.ListenAndServe()
 }

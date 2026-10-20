@@ -15,3 +15,6 @@ SELECT EXISTS(SELECT 1 FROM sessions WHERE token_hash = ? AND expires_at > ?);
 
 -- name: deleteSession :exec
 DELETE FROM sessions WHERE token_hash = ?;
+
+-- name: deleteExpiredSessions :exec
+DELETE FROM sessions WHERE expires_at <= ?;

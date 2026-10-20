@@ -36,25 +36,24 @@ func TestLocalesMatchDatabaseConstraint(t *testing.T) {
 	if !slices.Equal(values, want) {
 		t.Fatalf("DB locales=%v Go locales=%v", values, want)
 	}
-	query := New(database)
-	value, err := query.Get(t.Context())
+	value, err := Get(t.Context(), database)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, zone := range []string{"", "Local", "Invalid/Timezone"} {
 		value.Timezone = zone
-		if err := query.Save(t.Context(), value); err != ErrTimezone {
+		if err := Save(t.Context(), database, value); err != ErrTimezone {
 			t.Fatalf("zone %q: %v", zone, err)
 		}
 	}
 	value.Timezone = "UTC"
 	value.Locale = "fr"
-	if err := query.Save(t.Context(), value); err != ErrLocale {
+	if err := Save(t.Context(), database, value); err != ErrLocale {
 		t.Fatalf("invalid locale: %v", err)
 	}
 	value.Locale = LocaleEnglish
 	value.Currency = " "
-	if err := query.Save(t.Context(), value); err != ErrCurrency {
+	if err := Save(t.Context(), database, value); err != ErrCurrency {
 		t.Fatalf("empty currency: %v", err)
 	}
 }

@@ -9,20 +9,20 @@ import (
 	"context"
 )
 
-const get = `-- name: Get :one
+const get = `-- name: get :one
 SELECT landlord_name, timezone, currency, locale FROM settings WHERE id = 1
 `
 
-type GetRow struct {
+type getRow struct {
 	LandlordName string
 	Timezone     string
 	Currency     string
 	Locale       string
 }
 
-func (q *Queries) Get(ctx context.Context) (GetRow, error) {
+func (q *Queries) get(ctx context.Context) (getRow, error) {
 	row := q.db.QueryRowContext(ctx, get)
-	var i GetRow
+	var i getRow
 	err := row.Scan(
 		&i.LandlordName,
 		&i.Timezone,

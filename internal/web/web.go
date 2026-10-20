@@ -24,13 +24,13 @@ const sessionCookie = "wingmanager_session"
 
 type server struct {
 	auth      *auth.Service
-	settings  *settings.Queries
+	database  *sql.DB
 	templates *template.Template
 }
 
 type pageData struct {
 	Page     string
-	Settings settings.GetRow
+	Settings settings.Settings
 	Locales  []string
 	SignedIn bool
 	Error    string
@@ -51,7 +51,7 @@ func New(database *sql.DB) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &server{auth: auth.NewService(database), settings: settings.New(database), templates: templates}
+	s := &server{auth: auth.NewService(database), database: database, templates: templates}
 	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
@@ -179,7 +179,7 @@ func (s *server) editSettings(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "settings", http.StatusBadRequest, "invalid_form")
 		return
 	}
-	err := s.settings.Save(r.Context(), settings.GetRow{
+	err := settings.Save(r.Context(), s.database, settings.Settings{
 		LandlordName: r.PostForm.Get("landlord_name"), Timezone: r.PostForm.Get("timezone"),
 		Currency: r.PostForm.Get("currency"), Locale: r.PostForm.Get("locale"),
 	})
@@ -198,7 +198,7 @@ func (s *server) editSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) render(w http.ResponseWriter, r *http.Request, page string, status int, message string) {
-	value, err := s.settings.Get(r.Context())
+	value, err := settings.Get(r.Context(), s.database)
 	if err != nil {
 		s.fail(w, err)
 		return

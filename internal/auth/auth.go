@@ -11,12 +11,18 @@ import (
 	"net/mail"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 // Sessions last seven days, balancing daily use with a bounded login lifetime.
 const sessionDuration = 7 * 24 * time.Hour
+
+const (
+	minPasswordCharacters = 8
+	maxPasswordBytes      = 72 // bcrypt rejects passwords above this byte limit.
+)
 
 var (
 	ErrSetupComplete  = errors.New("owner already exists")
@@ -39,11 +45,12 @@ func (s *Service) HasOwner(ctx context.Context) (bool, error) {
 	return s.queries.hasOwner(ctx)
 }
 
-// Setup creates the only owner; concurrent attempts return ErrSetupComplete.
+// Setup creates the only owner with a password of at least 8 characters and at most 72 bytes.
+// Concurrent attempts return ErrSetupComplete.
 func (s *Service) Setup(ctx context.Context, email, password string) error {
 	email = strings.TrimSpace(email)
 	address, err := mail.ParseAddress(email)
-	if err != nil || address.Address != email || password == "" || len(password) > 72 {
+	if err != nil || address.Address != email || utf8.RuneCountInString(password) < minPasswordCharacters || len(password) > maxPasswordBytes {
 		return ErrInvalidAccount
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -69,7 +76,8 @@ func (s *Service) Setup(ctx context.Context, email, password string) error {
 	return tx.Commit()
 }
 
-// Login issues a new opaque token; only its SHA-256 credential hash is persisted.
+// Login removes expired sessions and issues a new opaque token after verifying credentials.
+// Only the token's SHA-256 credential hash is persisted.
 func (s *Service) Login(ctx context.Context, email, password string) (token string, expires time.Time, err error) {
 	user, err := s.queries.findUser(ctx, strings.TrimSpace(email))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -90,7 +98,11 @@ func (s *Service) Login(ctx context.Context, email, password string) (token stri
 	}
 	token = base64.RawURLEncoding.EncodeToString(secret)
 	hash := sha256.Sum256([]byte(token))
-	expires = time.Now().UTC().Add(sessionDuration)
+	now := time.Now().UTC()
+	if err := s.queries.deleteExpiredSessions(ctx, now.Format(time.RFC3339)); err != nil {
+		return "", time.Time{}, err
+	}
+	expires = now.Add(sessionDuration)
 	err = s.queries.createSession(ctx, createSessionParams{TokenHash: hash[:], UserID: user.ID, ExpiresAt: expires.Format(time.RFC3339)})
 	return token, expires, err
 }

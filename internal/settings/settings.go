@@ -3,6 +3,7 @@ package settings
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
@@ -23,8 +24,22 @@ var (
 	ErrCurrency = errors.New("currency is required")
 )
 
+// Settings holds the instance's user-editable business settings.
+type Settings struct {
+	LandlordName string
+	Timezone     string
+	Currency     string
+	Locale       string
+}
+
+// Get reads the instance's singleton settings row.
+func Get(ctx context.Context, database *sql.DB) (Settings, error) {
+	value, err := New(database).get(ctx)
+	return Settings(value), err
+}
+
 // Save validates user-editable settings and updates the singleton row atomically.
-func (q *Queries) Save(ctx context.Context, value GetRow) error {
+func Save(ctx context.Context, database *sql.DB, value Settings) error {
 	if value.Timezone == "" || value.Timezone == "Local" {
 		return ErrTimezone
 	}
@@ -38,5 +53,5 @@ func (q *Queries) Save(ctx context.Context, value GetRow) error {
 	if value.Currency == "" {
 		return ErrCurrency
 	}
-	return q.save(ctx, saveParams(value))
+	return New(database).save(ctx, saveParams(value))
 }

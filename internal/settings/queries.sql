@@ -1,4 +1,4 @@
--- name: Get :one
+-- name: get :one
 SELECT landlord_name, timezone, currency, locale FROM settings WHERE id = 1;
 
 -- name: save :exec
