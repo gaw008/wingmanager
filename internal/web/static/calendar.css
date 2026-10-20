@@ -18,3 +18,7 @@
 .calendar-grid .channel-other { background: #536a35; }
 .calendar-grid .conflict { outline: 3px solid #d12a28; outline-offset: -3px; }
 .booking-bar + .booking-bar { margin-top: .25rem; }
+
+.lease .booking-bar, .booking-legend.lease { background: #28633b; border: 2px solid #c4e2cf; }
+
+.booking-bar.lease-bar { background: #28633b; border: 2px solid #c4e2cf; }

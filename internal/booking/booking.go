@@ -62,9 +62,12 @@ type Details struct {
 }
 
 // ConflictError lists the confirmed bookings occupying the requested dates.
-type ConflictError struct{ Bookings []Booking }
+type ConflictError struct {
+	Bookings []Booking
+	LeaseIDs []int64
+}
 
-func (e *ConflictError) Error() string { return "booking overlaps confirmed bookings" }
+func (e *ConflictError) Error() string { return "booking overlaps occupied dates" }
 
 // Create saves a confirmed manual booking and any inline guest atomically.
 // Use a database opened by db.Open so its IMMEDIATE transaction protects occupancy.
@@ -316,8 +319,35 @@ func checkUnitOccupancy(ctx context.Context, queries *Queries, unitID, excludeID
 	if len(conflicts) != 0 {
 		return &ConflictError{Bookings: conflicts}
 	}
-	// M5 active-lease occupancy seam: check active leases here with the same
-	// requested range and transaction, before any booking write.
+	leases, err := queries.listActiveLeases(ctx, unitID)
+	if err != nil {
+		return err
+	}
+	var leaseIDs []int64
+	for _, l := range leases {
+		from, err := civildate.Parse(l.StartsOn)
+		if err != nil {
+			return err
+		}
+		var end *civildate.Date
+		if l.EndsOn.Valid {
+			date, err := civildate.Parse(l.EndsOn.String)
+			if err != nil {
+				return err
+			}
+			end = &date
+		}
+		occupied, err := occupancy.Lease(from, end)
+		if err != nil {
+			return err
+		}
+		if requested.Overlaps(occupied) {
+			leaseIDs = append(leaseIDs, l.ID)
+		}
+	}
+	if len(leaseIDs) > 0 {
+		return &ConflictError{LeaseIDs: leaseIDs}
+	}
 	return nil
 }
 

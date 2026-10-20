@@ -1,0 +1,49 @@
+{{define "leases"}}
+<p><a href="/leases/new">{{t .Settings.Locale "new_lease"}}</a></p>
+<form method="get"><label>{{t .Settings.Locale "booking_status"}}<select name="status"><option value="">{{t .Settings.Locale "all_statuses"}}</option>{{range .LeaseStatuses}}<option value="{{.}}" {{if eq . $.LeaseStatusFilter}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label><button>{{t .Settings.Locale "apply"}}</button></form>
+<table><thead><tr><th>{{t .Settings.Locale "leases"}}</th><th>{{t .Settings.Locale "unit_name"}}</th><th>{{t .Settings.Locale "tenants"}}</th><th>{{t .Settings.Locale "balance"}} ({{.Settings.Currency}})</th><th>{{t .Settings.Locale "overdue"}}</th></tr></thead><tbody>
+{{range .LeaseRows}}<tr data-lease-id="{{.ID}}"><td><a href="/leases/{{.ID}}">#{{.ID}}</a> · {{t $.Settings.Locale .Status}}<br>{{.StartsOn}} → {{.EndsOn}}</td><td>{{.UnitLabel}}</td><td>{{.TenantNames}}</td><td>{{money .BalanceCents}}</td><td>{{if .DaysOverdue}}<mark>{{.DaysOverdue}} {{t $.Settings.Locale "days_overdue"}}</mark> · {{.OldestUnpaidOn}}{{end}}</td></tr>{{else}}<tr><td colspan="5">{{t .Settings.Locale "no_leases"}}</td></tr>{{end}}
+</tbody></table>
+{{end}}
+
+{{define "lease_terms"}}
+{{$draft := eq .Lease.Status "draft"}}{{$ended := eq .Lease.Status "ended"}}
+{{if $draft}}<label>{{t .Settings.Locale "unit_name"}}<select name="unit_id" required><option value="">{{t .Settings.Locale "select_unit"}}</option>{{range .UnitChoices}}<option value="{{.ID}}" {{if eq .ID $.Lease.UnitID}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>{{else}}<input type="hidden" name="unit_id" value="{{.Lease.UnitID}}">{{end}}
+<label>{{t .Settings.Locale "starts_on"}}<input name="starts_on" type="date" value="{{.Lease.StartsOn}}" required {{if not $draft}}readonly{{end}}></label>
+<label>{{t .Settings.Locale "ends_on"}}<input name="ends_on" type="date" value="{{.Lease.EndsOn}}" {{if $ended}}readonly{{end}}></label>
+<p>{{t .Settings.Locale "lease_dates_hint"}}</p>
+<label>{{t .Settings.Locale "monthly_rent"}} ({{.Settings.Currency}})<input name="rent" type="number" min="0.01" step="0.01" value="{{money .Lease.RentCents}}" required {{if $ended}}readonly{{end}}></label>
+<label>{{t .Settings.Locale "due_day"}}<input name="due_day" type="number" min="1" max="28" value="{{.Lease.DueDay}}" required {{if not $draft}}readonly{{end}}></label>
+<label>{{t .Settings.Locale "agreed_deposit"}} ({{.Settings.Currency}})<input name="deposit" type="number" min="0" step="0.01" value="{{money .Lease.DepositCents}}" required {{if not $draft}}readonly{{end}}></label>
+<label>{{t .Settings.Locale "notes"}}<textarea name="notes">{{.Lease.Notes}}</textarea></label><button>{{t .Settings.Locale "save"}}</button>
+{{end}}
+{{define "new_lease"}}<form method="post" action="/leases/new">{{template "lease_terms" .}}</form>{{end}}
+
+{{define "lease_detail"}}
+<p>#{{.Lease.ID}} · {{t .Settings.Locale .Lease.Status}}</p>
+<p><strong>{{t .Settings.Locale "balance"}}: <span id="lease-balance">{{money .Balance.BalanceCents}}</span> {{.Settings.Currency}}</strong> · {{t .Settings.Locale "agreed_deposit"}}: {{money .Lease.DepositCents}} · {{t .Settings.Locale "deposit_held"}}: <span id="deposit-held">{{money .Balance.DepositHeldCents}}</span>{{if .Balance.DaysOverdue}} · <mark>{{.Balance.DaysOverdue}} {{t .Settings.Locale "days_overdue"}}</mark>{{end}}</p>
+<details><summary>{{t .Settings.Locale "edit_lease"}}</summary><form method="post" action="/leases/{{.Lease.ID}}/edit">{{template "lease_terms" .}}</form></details>
+<h2>{{t .Settings.Locale "tenants"}}</h2>
+<ul>{{range .Tenants}}<li>{{.Name}} · {{.Email}} · {{.Phone}}{{if ne $.Lease.Status "ended"}}<form method="post" action="/leases/{{$.Lease.ID}}/remove-tenant"><input type="hidden" name="person_id" value="{{.ID}}"><button class="outline">{{t $.Settings.Locale "remove_tenant"}}</button></form>{{end}}</li>{{end}}</ul>
+{{if ne .Lease.Status "ended"}}
+<details><summary>{{t .Settings.Locale "add_tenant"}}</summary><form method="post" action="/leases/{{.Lease.ID}}/tenants">
+<label>{{t .Settings.Locale "existing_person"}}<select name="person_id"><option value="">—</option>{{range .People}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
+<p>{{t .Settings.Locale "inline_tenant_hint"}}</p>
+<label>{{t .Settings.Locale "name"}}<input name="name"></label><label>{{t .Settings.Locale "email"}}<input name="email" type="email"></label><label>{{t .Settings.Locale "phone"}}<input name="phone"></label><button>{{t .Settings.Locale "add_tenant"}}</button></form></details>
+{{end}}
+{{if eq .Lease.Status "draft"}}<form method="post" action="/leases/{{.Lease.ID}}/activate"><button>{{t .Settings.Locale "activate_lease"}}</button></form>{{end}}
+{{if eq .Lease.Status "active"}}<details><summary>{{t .Settings.Locale "end_lease"}}</summary><form method="post" action="/leases/{{.Lease.ID}}/end"><label>{{t .Settings.Locale "ends_on"}}<input type="date" name="ends_on" min="{{.Lease.StartsOn}}" value="{{.Lease.EndsOn}}" required></label><button>{{t .Settings.Locale "end_lease"}}</button></form></details>{{end}}
+<h2>{{t .Settings.Locale "rent_schedule"}}</h2>
+<table><thead><tr><th>{{t .Settings.Locale "rent_period"}}</th><th>{{t .Settings.Locale "occurred_on"}}</th><th>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})</th></tr></thead><tbody>{{range .RentSchedule}}<tr><td>{{.Period}}</td><td>{{.OccurredOn}}</td><td>{{money .AmountCents}}</td></tr>{{end}}</tbody></table>
+<h2>{{t .Settings.Locale "ledger_entries"}}</h2>
+<table><thead><tr><th>{{t .Settings.Locale "occurred_on"}}</th><th>{{t .Settings.Locale "booking_kind"}}</th><th>{{t .Settings.Locale "category"}}</th><th>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})</th><th>{{t .Settings.Locale "notes"}}</th><th>{{t .Settings.Locale "void_entry"}}</th></tr></thead><tbody>
+{{range .Entries}}<tr data-entry-id="{{.ID}}"><td>{{.OccurredOn}}</td><td>{{t $.Settings.Locale .Kind}}</td><td>{{t $.Settings.Locale .Category}}</td><td>{{money .AmountCents}}</td><td>{{.Memo}}</td><td>{{if .VoidedAt}}{{t $.Settings.Locale "voided"}} · {{.VoidedAt}} · {{.VoidReason}}{{else if not .Period}}<form method="post" action="/leases/{{$.Lease.ID}}/entries/{{.ID}}/void"><input name="reason" placeholder="{{t $.Settings.Locale "void_reason"}}" aria-label="{{t $.Settings.Locale "void_reason"}}" required><button class="outline">{{t $.Settings.Locale "void_entry"}}</button></form>{{end}}</td></tr>{{end}}
+</tbody></table>
+{{range .EntryForms}}<details><summary>{{t $.Settings.Locale .Kind}}</summary><form method="post" action="/leases/{{$.Lease.ID}}/entries"><input type="hidden" name="kind" value="{{.Kind}}"><label>{{t $.Settings.Locale "category"}}<select name="category">{{range .Categories}}<option value="{{.}}">{{t $.Settings.Locale .}}</option>{{end}}</select></label>{{template "entry_amount" $}}<button>{{t $.Settings.Locale "save"}}</button></form></details>{{end}}
+<details><summary>{{t .Settings.Locale "apply_deposit"}}</summary><form method="post" action="/leases/{{.Lease.ID}}/apply-deposit">{{template "entry_amount" .}}<button>{{t .Settings.Locale "apply_deposit"}}</button></form></details>
+{{end}}
+{{define "entry_amount"}}
+<label>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})<input name="amount" type="number" min="0.01" step="0.01" required></label>
+<label>{{t .Settings.Locale "occurred_on"}}<input name="occurred_on" type="date" value="{{.Today}}" required></label>
+<label>{{t .Settings.Locale "notes"}}<input name="memo"></label>
+{{end}}

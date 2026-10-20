@@ -10,6 +10,7 @@ import (
 	goical "github.com/emersion/go-ical"
 	"github.com/gaw008/wingmanager/internal/booking"
 	"github.com/gaw008/wingmanager/internal/civildate"
+	"github.com/gaw008/wingmanager/internal/lease"
 	"github.com/gaw008/wingmanager/internal/settings"
 )
 
@@ -49,9 +50,7 @@ type exportBlock struct {
 	from, to civildate.Date
 }
 
-// exportOccupancy is the M5 active-lease export seam: collect anonymous blocks
-// here without changing the encoder. Inclusive lease endpoints must be converted
-// through occupancy; no lease model or query is introduced before M5.
+// exportOccupancy collects anonymous blocks with shared occupancy endpoints.
 func exportOccupancy(ctx context.Context, database *sql.DB, unitID int64, today civildate.Date) ([]exportBlock, error) {
 	values, err := booking.List(ctx, database, booking.Filter{UnitID: unitID, Status: booking.StatusConfirmed})
 	if err != nil {
@@ -71,6 +70,30 @@ func exportOccupancy(ctx context.Context, database *sql.DB, unitID int64, today 
 			return nil, err
 		}
 		blocks = append(blocks, exportBlock{uid: fmt.Sprintf("booking-%d@wingmanager", value.ID), from: from, to: to})
+	}
+	leases, err := lease.List(ctx, database, lease.StatusActive)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range leases {
+		if l.UnitID != unitID {
+			continue
+		}
+		interval, err := lease.Occupancy(l)
+		if err != nil {
+			return nil, err
+		}
+		from, to := interval.Bounds()
+		if to.IsZero() {
+			to, err = civildate.Parse(today.MidnightUTC().AddDate(2, 0, 0).Format(time.DateOnly))
+			if err != nil {
+				return nil, err
+			}
+		}
+		if to.Compare(today) < 0 {
+			continue
+		}
+		blocks = append(blocks, exportBlock{uid: fmt.Sprintf("lease-%d@wingmanager", l.ID), from: from, to: to})
 	}
 	return blocks, nil
 }

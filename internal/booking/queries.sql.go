@@ -76,6 +76,39 @@ func (q *Queries) getBooking(ctx context.Context, id int64) (bookingRecord, erro
 	return i, err
 }
 
+const listActiveLeases = `-- name: listActiveLeases :many
+SELECT id, starts_on, ends_on FROM leases WHERE unit_id = ? AND status = 'active'
+`
+
+type listActiveLeasesRow struct {
+	ID       int64
+	StartsOn string
+	EndsOn   sql.NullString
+}
+
+func (q *Queries) listActiveLeases(ctx context.Context, unitID int64) ([]listActiveLeasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveLeases, unitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []listActiveLeasesRow
+	for rows.Next() {
+		var i listActiveLeasesRow
+		if err := rows.Scan(&i.ID, &i.StartsOn, &i.EndsOn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBookings = `-- name: listBookings :many
 SELECT id, unit_id, kind, status, check_in, check_out, channel, guest_id, feed_id, external_uid, notes, created_at, updated_at FROM bookings ORDER BY check_in, id
 `

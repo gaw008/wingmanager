@@ -10,6 +10,7 @@ import (
 	"github.com/gaw008/wingmanager/internal/booking"
 	"github.com/gaw008/wingmanager/internal/civildate"
 	"github.com/gaw008/wingmanager/internal/ical"
+	"github.com/gaw008/wingmanager/internal/lease"
 	"github.com/gaw008/wingmanager/internal/occupancy"
 	"github.com/gaw008/wingmanager/internal/person"
 	"github.com/gaw008/wingmanager/internal/property"
@@ -31,11 +32,18 @@ type calendarDay struct {
 	Number int
 	Today  bool
 }
+
+// calendarEntry describes occupancy presentation, independent of its source model.
+type calendarEntry struct {
+	ID                                   int64
+	URL, Kind, Channel, Dates, GuestName string
+	Imported, Conflict                   bool
+}
 type calendarCell struct {
 	calendarDay
-	Span     int
-	Bookings []bookingRow
-	Conflict bool
+	Span      int
+	Occupants []calendarEntry
+	Conflict  bool
 }
 type calendarUnit struct {
 	ID    int64
@@ -75,7 +83,7 @@ func (s *server) registerBookingRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /bookings/{id}/restore", func(w http.ResponseWriter, r *http.Request) { s.cancelBooking(w, r, false) })
 }
 
-func (s *server) bookingChoices(ctx context.Context, data *pageData) error {
+func (s *server) contactAndUnitChoices(ctx context.Context, data *pageData) error {
 	properties, err := property.List(ctx, s.database, true)
 	if err != nil {
 		return err
@@ -90,7 +98,6 @@ func (s *server) bookingChoices(ctx context.Context, data *pageData) error {
 		}
 	}
 	data.People, err = person.List(ctx, s.database, "")
-	data.Kinds, data.Statuses, data.Channels = booking.Kinds(), booking.Statuses(), booking.Channels()
 	return err
 }
 
@@ -112,7 +119,8 @@ func bookingRows(values []booking.Booking, data pageData) []bookingRow {
 
 func (s *server) listBookings(w http.ResponseWriter, r *http.Request) {
 	data := pageData{Page: "bookings"}
-	if err := s.bookingChoices(r.Context(), &data); err != nil {
+	data.Statuses = booking.Statuses()
+	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -144,7 +152,8 @@ func (s *server) listBookings(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 	data := pageData{Page: "new_booking"}
-	if err := s.bookingChoices(r.Context(), &data); err != nil {
+	data.Kinds, data.Statuses, data.Channels = booking.Kinds(), booking.Statuses(), booking.Channels()
+	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -254,7 +263,8 @@ func (s *server) cancelBooking(w http.ResponseWriter, r *http.Request, cancelled
 		return
 	}
 	data := pageData{Page: "edit_booking"}
-	if err := s.bookingChoices(r.Context(), &data); err != nil {
+	data.Kinds, data.Statuses, data.Channels = booking.Kinds(), booking.Statuses(), booking.Channels()
+	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -276,6 +286,9 @@ func (s *server) bookingResult(w http.ResponseWriter, r *http.Request, data page
 	switch {
 	case errors.As(err, &conflict):
 		data.Error = "booking_conflict"
+		if len(conflict.LeaseIDs) > 0 {
+			data.Error = "booking_lease_conflict"
+		}
 		data.Conflicts = bookingRows(conflict.Bookings, data)
 		status = http.StatusConflict
 	case errors.Is(err, booking.ErrNotFound):
@@ -327,7 +340,7 @@ func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	if err := s.bookingChoices(r.Context(), &data); err != nil {
+	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -337,7 +350,7 @@ func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type occupied struct {
-		row      bookingRow
+		row      calendarEntry
 		interval occupancy.Range
 	}
 	byUnit := make(map[int64][]occupied)
@@ -358,7 +371,23 @@ func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if interval.Overlaps(monthRange) {
-			byUnit[row.UnitID] = append(byUnit[row.UnitID], occupied{row, interval})
+			byUnit[row.UnitID] = append(byUnit[row.UnitID], occupied{calendarEntry{ID: row.ID, URL: fmt.Sprintf("/bookings/%d", row.ID), Kind: row.Kind, Channel: row.Channel, Dates: row.CheckIn + " → " + row.CheckOut, GuestName: row.GuestName, Imported: row.Imported}, interval})
+		}
+	}
+	leases, err := lease.List(r.Context(), s.database, lease.StatusActive)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	for _, l := range leases {
+		interval, err := lease.Occupancy(l)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		if interval.Overlaps(monthRange) {
+			from, _ := interval.Bounds()
+			byUnit[l.UnitID] = append(byUnit[l.UnitID], occupied{calendarEntry{ID: l.ID, URL: fmt.Sprintf("/leases/%d", l.ID), Kind: "lease", Dates: from.String() + " → " + l.EndsOn}, interval})
 		}
 	}
 	for unitID, items := range byUnit {
@@ -396,29 +425,29 @@ func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
 				cell := calendarCell{calendarDay: data.Days[i], Span: 1}
 				for _, b := range byUnit[u.ID] {
 					if b.interval.Overlaps(dayRange) {
-						cell.Bookings = append(cell.Bookings, b.row)
+						cell.Occupants = append(cell.Occupants, b.row)
 					}
 				}
-				cell.Conflict = len(cell.Bookings) > 1
+				cell.Conflict = len(cell.Occupants) > 1
 				// Merge only adjacent days with the same occupants, so overlapping imports
 				// all remain visible and a conflict never hides the second booking.
-				for len(cell.Bookings) > 0 && i+cell.Span < len(data.Days) {
+				for len(cell.Occupants) > 0 && i+cell.Span < len(data.Days) {
 					next := day.AddDays(cell.Span)
 					nextRange, err := occupancy.Stay(next, next.AddDays(1))
 					if err != nil {
 						s.fail(w, err)
 						return
 					}
-					var nextBookings []bookingRow
+					var nextOccupants []calendarEntry
 					for _, b := range byUnit[u.ID] {
 						if b.interval.Overlaps(nextRange) {
-							nextBookings = append(nextBookings, b.row)
+							nextOccupants = append(nextOccupants, b.row)
 						}
 					}
-					same := len(nextBookings) == len(cell.Bookings)
+					same := len(nextOccupants) == len(cell.Occupants)
 					if same {
-						for j := range nextBookings {
-							if nextBookings[j].ID != cell.Bookings[j].ID {
+						for j := range nextOccupants {
+							if nextOccupants[j].URL != cell.Occupants[j].URL {
 								same = false
 								break
 							}

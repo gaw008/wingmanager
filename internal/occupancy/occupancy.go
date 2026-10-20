@@ -42,3 +42,6 @@ func (r Range) Overlaps(other Range) bool {
 	return (r.to.IsZero() || other.from.Compare(r.to) < 0) &&
 		(other.to.IsZero() || r.from.Compare(other.to) < 0)
 }
+
+// Bounds returns half-open endpoints. A zero to means open-ended occupancy.
+func (r Range) Bounds() (from, to civildate.Date) { return r.from, r.to }

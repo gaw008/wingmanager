@@ -62,3 +62,25 @@ sql:
         omit_unused_structs: true
         rename:
           calendar_feed: feedRecord
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/lease/queries.sql
+    gen:
+      go:
+        package: lease
+        out: internal/lease
+        omit_unused_structs: true
+        rename:
+          lease: leaseRecord
+          ledger_entry: entryRecord
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/ledger/queries.sql
+    gen:
+      go:
+        package: ledger
+        out: internal/ledger
+        omit_unused_structs: true
+        rename:
+          lease: leaseRecord
+          ledger_entry: entryRecord

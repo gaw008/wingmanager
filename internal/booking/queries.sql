@@ -40,3 +40,6 @@ UPDATE bookings SET feed_id = NULL, external_uid = NULL, updated_at = datetime('
 
 -- name: updateImportedOwnerFields :exec
 UPDATE bookings SET guest_id = ?, notes = ?, updated_at = datetime('now') WHERE id = ?;
+
+-- name: listActiveLeases :many
+SELECT id, starts_on, ends_on FROM leases WHERE unit_id = ? AND status = 'active';

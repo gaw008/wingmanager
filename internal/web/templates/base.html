@@ -19,7 +19,9 @@
         <li><a href="/people">{{t .Settings.Locale "people"}}</a></li>
         <li><a href="/calendar">{{t .Settings.Locale "calendar"}}</a></li>
         <li><a href="/bookings">{{t .Settings.Locale "bookings"}}</a></li>
-        <li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
+        <li><a href="/leases">{{t .Settings.Locale "leases"}}</a></li>
+<li><a href="/overdue">{{t .Settings.Locale "overdue"}}</a></li>
+<li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
         <li><form method="post" action="/logout"><button type="submit" class="outline">{{t .Settings.Locale "logout"}}</button></form></li>
       </ul>{{end}}
     </nav>
@@ -38,6 +40,9 @@
     {{if eq .Page "calendar"}}{{template "calendar" .}}{{end}}
     {{if eq .Page "bookings"}}{{template "bookings" .}}{{end}}
     {{if or (eq .Page "new_booking") (eq .Page "edit_booking")}}{{template "booking_form" .}}{{end}}
+    {{if or (eq .Page "leases") (eq .Page "overdue")}}{{template "leases" .}}{{end}}
+    {{if eq .Page "new_lease"}}{{template "new_lease" .}}{{end}}
+    {{if eq .Page "lease_detail"}}{{template "lease_detail" .}}{{end}}
   </main>
 </body>
 </html>{{end}}
