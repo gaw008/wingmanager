@@ -4,9 +4,9 @@ Open-source PMS for individual landlords (short-term + long-term rentals). Go + 
 
 **`docs/PLAN.md` is the spec. Read it fully before every task.** Decisions live in `docs/decisions/`.
 
-## Precedence over the global ~/.codex/AGENTS.md
+## Project rules
 
-This project deliberately differs from the global file in these points (approved by the project owner via PLAN.md). Everything else in the global file still applies.
+This file takes precedence over the global ~/.codex/AGENTS.md.
 
 1. **Tests are required.** Write tests as specified in PLAN §9: real SQLite (temp file + migrations), no DB mocks; only network is faked (`httptest`). Every milestone's "完成标志" must be backed by a test where possible.
 2. **Authentication is a product feature, not a guardrail.** Implement login, bcrypt password hashing, session tokens stored as SHA-256 hashes (credential storage, not a checksum), and cross-origin protection exactly as PLAN describes.
