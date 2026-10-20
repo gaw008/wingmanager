@@ -38,6 +38,15 @@ func (q *Queries) createSession(ctx context.Context, arg createSessionParams) er
 	return err
 }
 
+const deleteAllSessions = `-- name: deleteAllSessions :exec
+DELETE FROM sessions
+`
+
+func (q *Queries) deleteAllSessions(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllSessions)
+	return err
+}
+
 const deleteExpiredSessions = `-- name: deleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at <= ?
 `
@@ -81,6 +90,18 @@ func (q *Queries) hasOwner(ctx context.Context) (bool, error) {
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const resetOwnerPassword = `-- name: resetOwnerPassword :execrows
+UPDATE users SET password_hash = ?
+`
+
+func (q *Queries) resetOwnerPassword(ctx context.Context, passwordHash string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resetOwnerPassword, passwordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const sessionExists = `-- name: sessionExists :one

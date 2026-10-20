@@ -18,3 +18,9 @@ DELETE FROM sessions WHERE token_hash = ?;
 
 -- name: deleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at <= ?;
+
+-- name: resetOwnerPassword :execrows
+UPDATE users SET password_hash = ?;
+
+-- name: deleteAllSessions :exec
+DELETE FROM sessions;

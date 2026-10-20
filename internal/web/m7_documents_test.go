@@ -51,7 +51,7 @@ func TestM7DocumentHTTPAttachmentOwnersAndDelete(t *testing.T) {
 		t.Run(locale, func(t *testing.T) {
 			a := newM3App(t, locale)
 			dataDir := t.TempDir()
-			handler, err := newHandler(a.database, time.Now, ical.NewService(a.database, nil, time.Now), dataDir)
+			handler, err := newHandler(a.database, time.Now, ical.NewService(a.database, nil, time.Now), Config{DataDir: dataDir})
 			if err != nil {
 				t.Fatal(err)
 			}

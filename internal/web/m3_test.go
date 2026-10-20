@@ -60,7 +60,7 @@ func newM3App(t *testing.T, locale string) m3App {
 	}
 	// UTC is already Nov 1, while the configured local date is still Oct 31.
 	now := func() time.Time { return time.Date(2026, 11, 1, 1, 30, 0, 0, time.UTC) }
-	handler, err := newHandler(database, now, ical.NewService(database, nil, now), t.TempDir())
+	handler, err := newHandler(database, now, ical.NewService(database, nil, now), Config{DataDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

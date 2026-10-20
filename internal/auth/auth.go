@@ -28,6 +28,7 @@ var (
 	ErrSetupComplete  = errors.New("owner already exists")
 	ErrInvalidAccount = errors.New("invalid email or password")
 	ErrCredentials    = errors.New("incorrect email or password")
+	ErrNoOwner        = errors.New("owner does not exist")
 )
 
 type Service struct {
@@ -50,10 +51,10 @@ func (s *Service) HasOwner(ctx context.Context) (bool, error) {
 func (s *Service) Setup(ctx context.Context, email, password string) error {
 	email = strings.TrimSpace(email)
 	address, err := mail.ParseAddress(email)
-	if err != nil || address.Address != email || utf8.RuneCountInString(password) < minPasswordCharacters || len(password) > maxPasswordBytes {
+	if err != nil || address.Address != email {
 		return ErrInvalidAccount
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := passwordHash(password)
 	if err != nil {
 		return err
 	}
@@ -70,16 +71,58 @@ func (s *Service) Setup(ctx context.Context, email, password string) error {
 	if exists {
 		return ErrSetupComplete
 	}
-	if err := queries.createOwner(ctx, createOwnerParams{Email: email, PasswordHash: string(hash)}); err != nil {
+	if err := queries.createOwner(ctx, createOwnerParams{Email: email, PasswordHash: hash}); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
+// ResetPassword replaces the owner's password and invalidates all sessions atomically.
+// It uses the same password rule as Setup and returns ErrNoOwner before setup.
+func (s *Service) ResetPassword(ctx context.Context, password string) error {
+	hash, err := passwordHash(password)
+	if err != nil {
+		return err
+	}
+	tx, err := s.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	queries := s.queries.WithTx(tx)
+	count, err := queries.resetOwnerPassword(ctx, hash)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNoOwner
+	}
+	if err := queries.deleteAllSessions(ctx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func passwordHash(password string) (string, error) {
+	if utf8.RuneCountInString(password) < minPasswordCharacters || len(password) > maxPasswordBytes {
+		return "", ErrInvalidAccount
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(hash), err
+}
+
 // Login removes expired sessions and issues a new opaque token after verifying credentials.
 // Only the token's SHA-256 credential hash is persisted.
 func (s *Service) Login(ctx context.Context, email, password string) (token string, expires time.Time, err error) {
-	user, err := s.queries.findUser(ctx, strings.TrimSpace(email))
+	// The IMMEDIATE lock serializes credential verification with password resets.
+	// A login using the old hash cannot issue a session after a reset commits.
+	tx, err := s.database.BeginTx(ctx, nil)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	defer tx.Rollback()
+	queries := s.queries.WithTx(tx)
+	user, err := queries.findUser(ctx, strings.TrimSpace(email))
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", time.Time{}, ErrCredentials
 	}
@@ -99,12 +142,17 @@ func (s *Service) Login(ctx context.Context, email, password string) (token stri
 	token = base64.RawURLEncoding.EncodeToString(secret)
 	hash := sha256.Sum256([]byte(token))
 	now := time.Now().UTC()
-	if err := s.queries.deleteExpiredSessions(ctx, now.Format(time.RFC3339)); err != nil {
+	if err := queries.deleteExpiredSessions(ctx, now.Format(time.RFC3339)); err != nil {
 		return "", time.Time{}, err
 	}
 	expires = now.Add(sessionDuration)
-	err = s.queries.createSession(ctx, createSessionParams{TokenHash: hash[:], UserID: user.ID, ExpiresAt: expires.Format(time.RFC3339)})
-	return token, expires, err
+	if err := queries.createSession(ctx, createSessionParams{TokenHash: hash[:], UserID: user.ID, ExpiresAt: expires.Format(time.RFC3339)}); err != nil {
+		return "", time.Time{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expires, nil
 }
 
 // Authenticated accepts only an unexpired session token.

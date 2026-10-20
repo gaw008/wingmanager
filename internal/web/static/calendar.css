@@ -1,11 +1,17 @@
-.calendar-grid { width: max-content; min-width: 100%; font-size: .85rem; }
-.calendar-grid th, .calendar-grid td { padding: .35rem; text-align: center; }
-.calendar-grid th:first-child { min-width: 9rem; text-align: left; }
-.calendar-grid td { min-width: 2rem; }
+nav, nav ul { flex-wrap: wrap; }
+nav ul:first-of-type, nav ul:last-of-type { margin-inline: 0; }
+nav li { white-space: nowrap; }
+nav form { margin-bottom: 0; }
+
+.calendar-grid { width: 100%; min-width: 48rem; table-layout: fixed; font-size: .85rem; }
+.calendar-grid .calendar-unit { width: 8rem; }
+.calendar-grid th, .calendar-grid td { padding: .35rem .1rem; text-align: center; }
+.calendar-grid th { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-grid th[scope="row"], .calendar-grid th[scope="rowgroup"] { text-align: left; }
 .calendar-grid .calendar-property th { background: var(--pico-card-sectioning-background-color); }
 .calendar-today { background: var(--pico-primary-focus); box-shadow: inset 0 -3px var(--pico-primary); }
 .calendar-grid .occupied { padding: .15rem 0; }
-.booking-bar { display: block; padding: .45rem .6rem; border-radius: .25rem; color: #fff; text-decoration: none; white-space: nowrap; }
+.booking-bar { display: block; overflow: hidden; text-overflow: ellipsis; padding: .45rem .6rem; border-radius: .25rem; color: #fff; text-decoration: none; white-space: nowrap; }
 .stay .booking-bar, .booking-legend.stay { background: #176583; }
 .block .booking-bar, .booking-legend.block { background: #575269; border: 2px dashed #d9d5e4; }
 .booking-legend { color: #fff; padding: .15rem .5rem; border-radius: .25rem; }
@@ -22,3 +28,5 @@
 .lease .booking-bar, .booking-legend.lease { background: #28633b; border: 2px solid #c4e2cf; }
 
 .booking-bar.lease-bar { background: #28633b; border: 2px solid #c4e2cf; }
+
+.feed-error { overflow-wrap: anywhere; }

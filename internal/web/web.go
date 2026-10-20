@@ -29,12 +29,21 @@ var assets embed.FS
 const sessionCookie = "wingmanager_session"
 
 type server struct {
-	auth      *auth.Service
-	database  *sql.DB
-	templates *template.Template
-	now       func() time.Time
-	ical      *ical.Service
-	documents *document.Store
+	auth          *auth.Service
+	database      *sql.DB
+	templates     *template.Template
+	now           func() time.Time
+	ical          *ical.Service
+	documents     *document.Store
+	secureCookies bool
+}
+
+// Config contains the server's deployment settings.
+type Config struct {
+	DataDir string
+	// BehindHTTPSProxy sets Secure cookies when TLS terminates at a reverse proxy.
+	// Forwarded request headers never affect this setting.
+	BehindHTTPSProxy bool
 }
 
 type pageData struct {
@@ -64,12 +73,12 @@ type pageData struct {
 // New serves setup/login/static and tokenized iCal exports publicly. All other
 // pages require a session. service must be shared with the scheduler for single-flight.
 // Cross-origin protection wraps all routes, including the unauthenticated forms.
-// dataDir is the same directory passed to serve; attachments live in its files subdirectory.
-func New(database *sql.DB, service *ical.Service, dataDir string) (http.Handler, error) {
-	return newHandler(database, time.Now, service, dataDir)
+// Config.DataDir is the same directory passed to serve; attachments live in its files subdirectory.
+func New(database *sql.DB, service *ical.Service, config Config) (http.Handler, error) {
+	return newHandler(database, time.Now, service, config)
 }
 
-func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, dataDir string) (http.Handler, error) {
+func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, config Config) (http.Handler, error) {
 	templates, err := template.New("pages").Funcs(template.FuncMap{
 		"money":           money.Format,
 		"calendarColumns": func(days int) int { return days + 1 },
@@ -90,7 +99,7 @@ func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, d
 	if err != nil {
 		return nil, err
 	}
-	s := &server{auth: auth.NewService(database), database: database, templates: templates, now: now, ical: service, documents: document.NewStore(database, dataDir)}
+	s := &server{auth: auth.NewService(database), database: database, templates: templates, now: now, ical: service, documents: document.NewStore(database, config.DataDir), secureCookies: config.BehindHTTPSProxy}
 	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
@@ -198,7 +207,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, Expires: expires})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.secureCookies || r.TLS != nil, Expires: expires})
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -212,7 +221,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.secureCookies || r.TLS != nil, MaxAge: -1})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 

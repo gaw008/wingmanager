@@ -166,7 +166,7 @@ func TestM2HTTPHappyPathsBothLanguages(t *testing.T) {
 				t.Fatal("search ignored")
 			}
 			// Database-backed state remains available after constructing a fresh handler.
-			rebuilt, err := web.New(a.database, ical.NewService(a.database, nil, time.Now), t.TempDir())
+			rebuilt, err := web.New(a.database, ical.NewService(a.database, nil, time.Now), web.Config{DataDir: t.TempDir()})
 			if err != nil {
 				t.Fatal(err)
 			}
