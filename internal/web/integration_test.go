@@ -36,7 +36,7 @@ func newApp(t *testing.T) app {
 	if err := db.Migrate(t.Context(), database); err != nil {
 		t.Fatal(err)
 	}
-	handler, err := web.New(database, ical.NewService(database, nil, time.Now))
+	handler, err := web.New(database, ical.NewService(database, nil, time.Now), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestSettingsAndEnglishUI(t *testing.T) {
 		}
 	}
 	// Constructing a new handler preserves the database-backed language.
-	handler, err := web.New(a.database, ical.NewService(a.database, nil, time.Now))
+	handler, err := web.New(a.database, ical.NewService(a.database, nil, time.Now), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

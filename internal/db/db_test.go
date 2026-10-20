@@ -61,7 +61,7 @@ func TestMigrateTwice(t *testing.T) {
 	if err := records.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"bookings", "calendar_feeds", "lease_tenants", "leases", "ledger_entries", "people", "properties", "schema_migrations", "sessions", "settings", "tasks", "units", "users"}; !reflect.DeepEqual(tables, want) {
+	if want := []string{"bookings", "calendar_feeds", "documents", "lease_tenants", "leases", "ledger_entries", "people", "properties", "schema_migrations", "sessions", "settings", "sqlite_sequence", "tasks", "units", "users"}; !reflect.DeepEqual(tables, want) {
 		t.Fatalf("tables=%v want %v", tables, want)
 	}
 }

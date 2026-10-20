@@ -23,6 +23,7 @@
 <li><a href="/overdue">{{t .Settings.Locale "overdue"}}</a></li>
 <li><a href="/money">{{t .Settings.Locale "money"}}</a></li>
 <li><a href="/reports">{{t .Settings.Locale "reports"}}</a></li>
+<li><a href="/tasks">{{t .Settings.Locale "tasks"}}</a></li>
 <li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
         <li><form method="post" action="/logout"><button type="submit" class="outline">{{t .Settings.Locale "logout"}}</button></form></li>
       </ul>{{end}}
@@ -31,6 +32,7 @@
   <main class="container">
     <h1>{{t .Settings.Locale .Page}}</h1>
     {{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+    {{if eq .Page "today"}}{{template "today" .}}{{end}}
     {{if eq .Page "setup"}}{{template "setup" .}}{{end}}
     {{if eq .Page "login"}}{{template "login" .}}{{end}}
     {{if eq .Page "settings"}}{{template "settings" .}}{{end}}
@@ -48,6 +50,13 @@
     {{if eq .Page "money"}}{{template "money_entries" .}}{{end}}
     {{if or (eq .Page "add_expense") (eq .Page "add_income")}}{{template "money_form" .}}{{end}}
     {{if eq .Page "reports"}}{{template "money_report" .}}{{end}}
+    {{if eq .Page "tasks"}}{{template "task_list" .}}{{end}}
+    {{if or (eq .Page "new_task") (eq .Page "edit_task")}}{{template "task_form" .}}{{end}}
+    {{if eq .Page "unit_detail"}}{{template "unit_detail" .}}{{end}}
+    {{if eq .Page "person_detail"}}{{template "person_detail" .}}{{end}}
+    {{if eq .Page "money_detail"}}{{template "money_detail" .}}{{end}}
+    {{if eq .Page "document_error"}}{{template "document_error" .}}{{end}}
+    {{if .DocumentPanel.UploadPath}}{{template "documents" .DocumentPanel}}{{end}}
   </main>
 </body>
 </html>{{end}}

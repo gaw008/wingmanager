@@ -166,7 +166,7 @@ func TestM2HTTPHappyPathsBothLanguages(t *testing.T) {
 				t.Fatal("search ignored")
 			}
 			// Database-backed state remains available after constructing a fresh handler.
-			rebuilt, err := web.New(a.database, ical.NewService(a.database, nil, time.Now))
+			rebuilt, err := web.New(a.database, ical.NewService(a.database, nil, time.Now), t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -212,8 +212,8 @@ func TestM2ValidationAndMissingRecordsHTTP(t *testing.T) {
 		status int
 	}{
 		{detail, 405},
-		{fmt.Sprintf("/units/%d", units[0].ID), 404},
-		{fmt.Sprintf("/people/%d", personID), 404},
+		{fmt.Sprintf("/units/%d", units[0].ID), 405},
+		{fmt.Sprintf("/people/%d", personID), 405},
 	} {
 		assertResponse(t, a, cookie, "DELETE", route.path, nil, route.status)
 	}

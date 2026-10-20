@@ -34,3 +34,10 @@ ORDER BY e.occurred_on, e.id;
 
 -- name: reportProperties :many
 SELECT id, name FROM properties WHERE (sqlc.arg(property_id) = 0 OR id = sqlc.arg(property_id)) ORDER BY id;
+-- name: overdueCandidates :many
+SELECT l.id, p.name AS property_name, u.name AS unit_name,
+       CAST(coalesce((SELECT group_concat(name, ', ') FROM
+           (SELECT person.name FROM lease_tenants lt JOIN people person ON person.id = lt.person_id
+            WHERE lt.lease_id = l.id ORDER BY person.name, person.id)), '') AS TEXT) AS tenant_names
+FROM leases l JOIN units u ON u.id = l.unit_id JOIN properties p ON p.id = u.property_id
+WHERE l.status != 'draft' ORDER BY p.name, u.name, l.id;

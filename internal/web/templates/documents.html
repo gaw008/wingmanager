@@ -1,0 +1,38 @@
+{{define "documents"}}
+<section aria-label="{{t .Locale "documents"}}">
+<h2>{{t .Locale "documents"}}</h2>
+<ul>{{range .Documents}}
+<li data-document-id="{{.ID}}"><a href="/documents/{{.ID}}">{{.Filename}}</a> · {{.SizeBytes}} {{t $.Locale "bytes"}} · {{.UploadedAt}}
+<form method="post" action="/documents/{{.ID}}/delete"><button class="outline" type="submit">{{t $.Locale "delete_document"}}</button></form></li>
+{{else}}<li>{{t .Locale "no_documents"}}</li>{{end}}</ul>
+<form method="post" enctype="multipart/form-data" action="{{.UploadPath}}">
+<label>{{t .Locale "upload_document"}}<input type="file" name="file" required></label>
+<small>{{t .Locale "document_limit"}}</small><button type="submit">{{t .Locale "upload_document"}}</button>
+</form>
+</section>
+{{end}}
+
+{{define "unit_detail"}}
+<h2>{{.Unit.Name}}</h2><p><a href="/properties/{{.Property.ID}}">{{.Property.Name}}</a>{{if .Unit.ArchivedAt}} · {{t .Settings.Locale "archived"}}{{end}}</p>
+{{end}}
+
+{{define "person_detail"}}
+<h2>{{.Person.Name}}</h2><p>{{.Person.Email}} · {{.Person.Phone}}</p><p>{{.Person.Notes}}</p>
+<p><a href="/people/{{.Person.ID}}/edit">{{t .Settings.Locale "edit"}}</a></p>
+{{end}}
+
+{{define "money_detail"}}
+<p>#{{.MoneyEntry.ID}} · <a href="/properties/{{.Property.ID}}">{{.Property.Name}}</a></p>
+<dl><dt>{{t .Settings.Locale "entry_kind"}}</dt><dd>{{t .Settings.Locale .MoneyEntry.Kind}}</dd>
+<dt>{{t .Settings.Locale "category"}}</dt><dd>{{t .Settings.Locale .MoneyEntry.Category}}</dd>
+<dt>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})</dt><dd>{{money .MoneyEntry.AmountCents}}</dd>
+<dt>{{t .Settings.Locale "occurred_on"}}</dt><dd>{{.MoneyEntry.OccurredOn}}</dd>
+<dt>{{t .Settings.Locale "notes"}}</dt><dd>{{.MoneyEntry.Memo}}</dd></dl>
+{{if .MoneyEntry.VoidedAt}}<p>{{t .Settings.Locale "voided"}}: {{.MoneyEntry.VoidReason}}</p>{{end}}
+{{if .MoneyEntry.LeaseID}}<p><a href="/leases/{{.MoneyEntry.LeaseID}}">{{t .Settings.Locale "lease"}} #{{.MoneyEntry.LeaseID}}</a></p>{{end}}
+{{if .MoneyEntry.BookingID}}<p><a href="/bookings/{{.MoneyEntry.BookingID}}">{{t .Settings.Locale "booking_label"}} #{{.MoneyEntry.BookingID}}</a></p>{{end}}
+{{end}}
+
+{{define "document_error"}}
+{{if .DocumentBack}}<p><a href="{{.DocumentBack}}">{{t .Settings.Locale "back"}}</a></p>{{end}}
+{{end}}

@@ -7,7 +7,7 @@
 </form>
 {{range .People}}
 <article>
-  <h2>{{.Name}}</h2>
+  <h2><a href="/people/{{.ID}}">{{.Name}}</a></h2>
   <p>{{.Email}} {{.Phone}}</p><p>{{.Notes}}</p>
   <a href="/people/{{.ID}}/edit">{{t $.Settings.Locale "edit"}}</a>
 </article>

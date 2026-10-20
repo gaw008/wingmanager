@@ -27,3 +27,8 @@ SELECT id FROM units WHERE ical_export_token = ?;
 
 -- name: futureConfirmedCount :one
 SELECT count(*) FROM bookings WHERE feed_id = ? AND status = 'confirmed' AND check_out >= ?;
+
+-- name: statusFeeds :many
+SELECT sqlc.embed(f), p.id AS property_id, p.name AS property_name, u.name AS unit_name
+FROM calendar_feeds f JOIN units u ON u.id = f.unit_id JOIN properties p ON p.id = u.property_id
+ORDER BY p.name, u.name, f.id;

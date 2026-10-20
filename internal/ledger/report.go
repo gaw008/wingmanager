@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/gaw008/wingmanager/internal/civildate"
 )
 
 // CategoryTotal retains the kind because payment categories describe receipt methods.
@@ -99,6 +101,19 @@ func (v *Totals) add(e Entry) {
 // properties, including archived ones; a positive ID selects exactly that property.
 // Receipt dates, including deposit_applied payments, determine income attribution.
 func Report(ctx context.Context, database *sql.DB, year int, propertyID int64) (YearReport, error) {
+	return report(ctx, database, year, propertyID, "")
+}
+
+// ReportToDate uses the report's cash-basis calculation for all properties from
+// January 1 through today, inclusive. Future-dated entries are excluded.
+func ReportToDate(ctx context.Context, database *sql.DB, today civildate.Date) (YearReport, error) {
+	if today.IsZero() {
+		return YearReport{}, ErrInvalid
+	}
+	return report(ctx, database, today.Year(), 0, today.String())
+}
+
+func report(ctx context.Context, database *sql.DB, year int, propertyID int64, through string) (YearReport, error) {
 	if year < 1 || year > 9999 || propertyID < 0 {
 		return YearReport{}, ErrInvalid
 	}
@@ -118,6 +133,15 @@ func Report(ctx context.Context, database *sql.DB, year int, propertyID int64) (
 	entries, err := loadEntries(ctx, q, Filter{Year: year, PropertyID: propertyID})
 	if err != nil {
 		return YearReport{}, err
+	}
+	if through != "" {
+		past := entries[:0]
+		for _, entry := range entries {
+			if entry.OccurredOn <= through {
+				past = append(past, entry)
+			}
+		}
+		entries = past
 	}
 	if err := tx.Commit(); err != nil {
 		return YearReport{}, err

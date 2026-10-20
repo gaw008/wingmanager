@@ -75,6 +75,24 @@ sql:
           ledger_entry: entryRecord
   - engine: sqlite
     schema: internal/db/migrations
+    queries: internal/document/queries.sql
+    gen:
+      go:
+        package: document
+        out: internal/document
+        omit_unused_structs: true
+        rename:
+          document: documentRecord
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/occupancy/queries.sql
+    gen:
+      go:
+        package: occupancy
+        out: internal/occupancy
+        omit_unused_structs: true
+  - engine: sqlite
+    schema: internal/db/migrations
     queries: internal/ledger/queries.sql
     gen:
       go:

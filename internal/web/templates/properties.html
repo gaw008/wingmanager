@@ -42,7 +42,7 @@
 </form>
 {{range .Units}}
 <article>
-  <h3>{{.Name}} {{if .ArchivedAt}}<small>{{t $.Settings.Locale "archived"}}</small>{{end}}</h3>
+  <h3><a href="/units/{{.ID}}">{{.Name}}</a> {{if .ArchivedAt}}<small>{{t $.Settings.Locale "archived"}}</small>{{end}}</h3>
   <form method="post" action="/units/{{.ID}}/rename{{if $.ShowArchived}}?archived=1{{end}}">
     <label for="unit-name-{{.ID}}">{{t $.Settings.Locale "unit_name"}}</label>
     <input id="unit-name-{{.ID}}" name="name" value="{{.Name}}" required>

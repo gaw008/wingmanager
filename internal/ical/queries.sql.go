@@ -124,6 +124,54 @@ func (q *Queries) removeFeed(ctx context.Context, id int64) error {
 	return err
 }
 
+const statusFeeds = `-- name: statusFeeds :many
+SELECT f.id, f.unit_id, f.channel, f.url, f.sync_generation, f.last_attempt_at, f.last_success_at, f.last_error, p.id AS property_id, p.name AS property_name, u.name AS unit_name
+FROM calendar_feeds f JOIN units u ON u.id = f.unit_id JOIN properties p ON p.id = u.property_id
+ORDER BY p.name, u.name, f.id
+`
+
+type statusFeedsRow struct {
+	FeedRecord   feedRecord
+	PropertyID   int64
+	PropertyName string
+	UnitName     string
+}
+
+func (q *Queries) statusFeeds(ctx context.Context) ([]statusFeedsRow, error) {
+	rows, err := q.db.QueryContext(ctx, statusFeeds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []statusFeedsRow
+	for rows.Next() {
+		var i statusFeedsRow
+		if err := rows.Scan(
+			&i.FeedRecord.ID,
+			&i.FeedRecord.UnitID,
+			&i.FeedRecord.Channel,
+			&i.FeedRecord.Url,
+			&i.FeedRecord.SyncGeneration,
+			&i.FeedRecord.LastAttemptAt,
+			&i.FeedRecord.LastSuccessAt,
+			&i.FeedRecord.LastError,
+			&i.PropertyID,
+			&i.PropertyName,
+			&i.UnitName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const syncFailed = `-- name: syncFailed :exec
 UPDATE calendar_feeds SET last_attempt_at = ?, last_error = ?
 WHERE id = ? AND sync_generation = ?

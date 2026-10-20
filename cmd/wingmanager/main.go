@@ -38,7 +38,7 @@ func run(args []string) error {
 	}
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := flags.String("addr", "127.0.0.1:8080", "HTTP listen address")
-	dataDir := flags.String("data-dir", "./data", "Directory containing the SQLite database")
+	dataDir := flags.String("data-dir", "./data", "Directory containing the SQLite database and uploaded files")
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -60,7 +60,7 @@ func run(args []string) error {
 		return err
 	}
 	service := ical.NewService(database, nil, time.Now)
-	handler, err := web.New(database, service)
+	handler, err := web.New(database, service, *dataDir)
 	if err != nil {
 		return err
 	}

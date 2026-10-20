@@ -43,3 +43,13 @@ UPDATE bookings SET guest_id = ?, notes = ?, updated_at = datetime('now') WHERE 
 
 -- name: listActiveLeases :many
 SELECT id, starts_on, ends_on FROM leases WHERE unit_id = ? AND status = 'active';
+
+-- name: turnovers :many
+SELECT b.id, b.check_in, b.check_out, p.name AS property_name, u.name AS unit_name,
+       coalesce(g.name, '') AS guest_name
+FROM bookings b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
+LEFT JOIN people g ON g.id = b.guest_id
+WHERE b.status = 'confirmed' AND b.kind = 'stay'
+  AND (b.check_in BETWEEN sqlc.arg(today) AND sqlc.arg(through_date)
+       OR b.check_out BETWEEN sqlc.arg(today) AND sqlc.arg(through_date))
+ORDER BY b.check_in, b.id;

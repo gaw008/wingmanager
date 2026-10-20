@@ -202,6 +202,50 @@ func (q *Queries) listEntries(ctx context.Context, leaseID sql.NullInt64) ([]ent
 	return items, nil
 }
 
+const overdueCandidates = `-- name: overdueCandidates :many
+SELECT l.id, p.name AS property_name, u.name AS unit_name,
+       CAST(coalesce((SELECT group_concat(name, ', ') FROM
+           (SELECT person.name FROM lease_tenants lt JOIN people person ON person.id = lt.person_id
+            WHERE lt.lease_id = l.id ORDER BY person.name, person.id)), '') AS TEXT) AS tenant_names
+FROM leases l JOIN units u ON u.id = l.unit_id JOIN properties p ON p.id = u.property_id
+WHERE l.status != 'draft' ORDER BY p.name, u.name, l.id
+`
+
+type overdueCandidatesRow struct {
+	ID           int64
+	PropertyName string
+	UnitName     string
+	TenantNames  string
+}
+
+func (q *Queries) overdueCandidates(ctx context.Context) ([]overdueCandidatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, overdueCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []overdueCandidatesRow
+	for rows.Next() {
+		var i overdueCandidatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyName,
+			&i.UnitName,
+			&i.TenantNames,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const postRent = `-- name: postRent :exec
 INSERT INTO ledger_entries (property_id, lease_id, kind, category, amount_cents, occurred_on, period)
 SELECT u.property_id, l.id, 'charge', 'rent', ?, ?, ? FROM leases l JOIN units u ON u.id = l.unit_id WHERE l.id = ?

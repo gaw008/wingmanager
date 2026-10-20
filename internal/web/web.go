@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gaw008/wingmanager/internal/auth"
+	"github.com/gaw008/wingmanager/internal/document"
 	"github.com/gaw008/wingmanager/internal/ical"
 	"github.com/gaw008/wingmanager/internal/money"
 	"github.com/gaw008/wingmanager/internal/person"
@@ -33,6 +34,7 @@ type server struct {
 	templates *template.Template
 	now       func() time.Time
 	ical      *ical.Service
+	documents *document.Store
 }
 
 type pageData struct {
@@ -54,16 +56,20 @@ type pageData struct {
 	feedPage
 	leasePage
 	moneyPage
+	taskPage
+	todayPage
+	documentPage
 }
 
 // New serves setup/login/static and tokenized iCal exports publicly. All other
 // pages require a session. service must be shared with the scheduler for single-flight.
 // Cross-origin protection wraps all routes, including the unauthenticated forms.
-func New(database *sql.DB, service *ical.Service) (http.Handler, error) {
-	return newHandler(database, time.Now, service)
+// dataDir is the same directory passed to serve; attachments live in its files subdirectory.
+func New(database *sql.DB, service *ical.Service, dataDir string) (http.Handler, error) {
+	return newHandler(database, time.Now, service, dataDir)
 }
 
-func newHandler(database *sql.DB, now func() time.Time, service *ical.Service) (http.Handler, error) {
+func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, dataDir string) (http.Handler, error) {
 	templates, err := template.New("pages").Funcs(template.FuncMap{
 		"money":           money.Format,
 		"calendarColumns": func(days int) int { return days + 1 },
@@ -84,7 +90,7 @@ func newHandler(database *sql.DB, now func() time.Time, service *ical.Service) (
 	if err != nil {
 		return nil, err
 	}
-	s := &server{auth: auth.NewService(database), database: database, templates: templates, now: now, ical: service}
+	s := &server{auth: auth.NewService(database), database: database, templates: templates, now: now, ical: service, documents: document.NewStore(database, dataDir)}
 	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
@@ -96,9 +102,7 @@ func newHandler(database *sql.DB, now func() time.Time, service *ical.Service) (
 	mux.HandleFunc("GET /login", s.login)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		s.render(w, r, pageData{Page: "today"}, http.StatusOK)
-	})
+	mux.HandleFunc("GET /{$}", s.today)
 	mux.HandleFunc("GET /settings", s.editSettings)
 	mux.HandleFunc("POST /settings", s.editSettings)
 	s.registerPropertyAndPersonRoutes(mux)
@@ -106,6 +110,8 @@ func newHandler(database *sql.DB, now func() time.Time, service *ical.Service) (
 	s.registerFeedRoutes(mux)
 	s.registerLeaseRoutes(mux)
 	s.registerMoneyRoutes(mux)
+	s.registerTaskRoutes(mux)
+	s.registerDocumentRoutes(mux)
 	return http.NewCrossOriginProtection().Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/static/") || strings.HasPrefix(r.URL.Path, "/ical/") {
 			mux.ServeHTTP(w, r)
@@ -246,6 +252,10 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, s
 	data.Settings = value
 	data.Locales = settings.Locales()
 	data.SignedIn = data.Page != "setup" && data.Page != "login"
+	if err := s.loadDocumentPanel(r, &data); err != nil {
+		s.fail(w, err)
+		return
+	}
 	if data.Page == "new_property" && r.Method == http.MethodGet {
 		data.FirstUnitName = catalogs[value.Locale]["default_unit_name"]
 	}

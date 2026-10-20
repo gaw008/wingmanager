@@ -48,6 +48,39 @@ func (q *Queries) cleaningForBooking(ctx context.Context, bookingID sql.NullInt6
 	return i, err
 }
 
+const createTask = `-- name: createTask :one
+INSERT INTO tasks (property_id, unit_id, kind, title, due_on, status, assignee, notes)
+SELECT p.id, ?1, ?2, ?3, ?4, 'open', ?5, ?6
+FROM properties p WHERE p.id = ?7
+ AND (?1 IS NULL OR EXISTS (SELECT 1 FROM units u WHERE u.id=?1 AND u.property_id=p.id))
+RETURNING id
+`
+
+type createTaskParams struct {
+	UnitID     sql.NullInt64
+	Kind       string
+	Title      string
+	DueOn      sql.NullString
+	Assignee   string
+	Notes      string
+	PropertyID int64
+}
+
+func (q *Queries) createTask(ctx context.Context, arg createTaskParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createTask,
+		arg.UnitID,
+		arg.Kind,
+		arg.Title,
+		arg.DueOn,
+		arg.Assignee,
+		arg.Notes,
+		arg.PropertyID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const ensureCleaning = `-- name: ensureCleaning :exec
 INSERT INTO tasks (property_id, unit_id, booking_id, kind, title, due_on, status)
 SELECT u.property_id, b.unit_id, b.id, 'cleaning', '', b.check_out, ?1
@@ -67,5 +100,126 @@ type ensureCleaningParams struct {
 
 func (q *Queries) ensureCleaning(ctx context.Context, arg ensureCleaningParams) error {
 	_, err := q.db.ExecContext(ctx, ensureCleaning, arg.Status, arg.BookingID)
+	return err
+}
+
+const getTask = `-- name: getTask :one
+SELECT id, property_id, unit_id, booking_id, kind, title, due_on, status, assignee, notes, done_at FROM tasks WHERE id = ?
+`
+
+func (q *Queries) getTask(ctx context.Context, id int64) (taskRecord, error) {
+	row := q.db.QueryRowContext(ctx, getTask, id)
+	var i taskRecord
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.UnitID,
+		&i.BookingID,
+		&i.Kind,
+		&i.Title,
+		&i.DueOn,
+		&i.Status,
+		&i.Assignee,
+		&i.Notes,
+		&i.DoneAt,
+	)
+	return i, err
+}
+
+const listTasks = `-- name: listTasks :many
+SELECT id, property_id, unit_id, booking_id, kind, title, due_on, status, assignee, notes, done_at FROM tasks
+WHERE (?1 = 0 OR property_id = ?1)
+ AND (?2 = '' OR status = ?2)
+ AND (?3 = '' OR kind = ?3)
+ AND (?4 = '' OR due_on >= ?4)
+ AND (?5 = '' OR due_on < ?5)
+ORDER BY due_on IS NULL, due_on, id
+`
+
+type listTasksParams struct {
+	PropertyID interface{}
+	Status     interface{}
+	Kind       interface{}
+	DueFrom    interface{}
+	DueUntil   interface{}
+}
+
+func (q *Queries) listTasks(ctx context.Context, arg listTasksParams) ([]taskRecord, error) {
+	rows, err := q.db.QueryContext(ctx, listTasks,
+		arg.PropertyID,
+		arg.Status,
+		arg.Kind,
+		arg.DueFrom,
+		arg.DueUntil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []taskRecord
+	for rows.Next() {
+		var i taskRecord
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.UnitID,
+			&i.BookingID,
+			&i.Kind,
+			&i.Title,
+			&i.DueOn,
+			&i.Status,
+			&i.Assignee,
+			&i.Notes,
+			&i.DoneAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setTaskStatus = `-- name: setTaskStatus :exec
+UPDATE tasks SET status = ?1,
+ done_at = CASE WHEN ?1 = 'done' THEN COALESCE(done_at,datetime('now')) ELSE NULL END
+WHERE id = ?2
+`
+
+type setTaskStatusParams struct {
+	Status string
+	ID     int64
+}
+
+func (q *Queries) setTaskStatus(ctx context.Context, arg setTaskStatusParams) error {
+	_, err := q.db.ExecContext(ctx, setTaskStatus, arg.Status, arg.ID)
+	return err
+}
+
+const updateTask = `-- name: updateTask :exec
+UPDATE tasks SET title = ?, due_on = ?, assignee = ?, notes = ? WHERE id = ?
+`
+
+type updateTaskParams struct {
+	Title    string
+	DueOn    sql.NullString
+	Assignee string
+	Notes    string
+	ID       int64
+}
+
+func (q *Queries) updateTask(ctx context.Context, arg updateTaskParams) error {
+	_, err := q.db.ExecContext(ctx, updateTask,
+		arg.Title,
+		arg.DueOn,
+		arg.Assignee,
+		arg.Notes,
+		arg.ID,
+	)
 	return err
 }
