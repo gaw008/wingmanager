@@ -1,0 +1,29 @@
+{{define "people"}}
+<p><a href="/people/new">{{t .Settings.Locale "new_person"}}</a></p>
+<form method="get" action="/people">
+  <label for="q">{{t .Settings.Locale "search_name"}}</label>
+  <input id="q" name="q" value="{{.Search}}" type="search">
+  <button type="submit">{{t .Settings.Locale "search"}}</button>
+</form>
+{{range .People}}
+<article>
+  <h2>{{.Name}}</h2>
+  <p>{{.Email}} {{.Phone}}</p><p>{{.Notes}}</p>
+  <a href="/people/{{.ID}}/edit">{{t $.Settings.Locale "edit"}}</a>
+</article>
+{{else}}<p>{{t .Settings.Locale "no_people"}}</p>{{end}}
+{{end}}
+
+{{define "person_form"}}
+<form method="post">
+  <label for="name">{{t .Settings.Locale "name"}}</label>
+  <input id="name" name="name" value="{{.Person.Name}}" autocomplete="name" required>
+  <label for="email">{{t .Settings.Locale "email"}}</label>
+  <input id="email" name="email" value="{{.Person.Email}}" type="email" autocomplete="email">
+  <label for="phone">{{t .Settings.Locale "phone"}}</label>
+  <input id="phone" name="phone" value="{{.Person.Phone}}" type="tel" autocomplete="tel">
+  <label for="notes">{{t .Settings.Locale "notes"}}</label>
+  <textarea id="notes" name="notes">{{.Person.Notes}}</textarea>
+  <button type="submit">{{t .Settings.Locale "save"}}</button>
+</form>
+{{end}}

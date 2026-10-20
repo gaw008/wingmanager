@@ -190,7 +190,7 @@ func TestCrossOriginPostsRejected(t *testing.T) {
 		{"Origin": {"https://other.example"}},
 		{"Sec-Fetch-Site": {"cross-site"}},
 	} {
-		for _, path := range []string{"/setup", "/login", "/settings", "/logout"} {
+		for _, path := range []string{"/setup", "/login", "/settings", "/logout", "/properties/new", "/properties/1/edit", "/properties/1/archive", "/properties/1/restore", "/properties/1/units", "/units/1/rename", "/units/1/archive", "/units/1/restore", "/units/1/token", "/people/new", "/people/1/edit"} {
 			request := httptest.NewRequest("POST", "http://wingmanager.example"+path, strings.NewReader(account().Encode()))
 			request.Header = header.Clone()
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")

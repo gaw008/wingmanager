@@ -18,6 +18,7 @@ This file takes precedence over the global ~/.codex/AGENTS.md.
 - **Do not commit.** Leave changes in the working tree; the supervisor reviews and commits.
 - Dependencies: only the whitelist in PLAN §3. Needing another one → stop and report, don't add it.
 - If PLAN is ambiguous or seems wrong: pick the simplest option consistent with PLAN, mark it in code with `// PLAN-DEVIATION:` and list it in your report. Never silently diverge.
+- `docs/decisions/` is for the owner's decisions only. Put your design notes, five-state analysis and red-flag review in your final report; the supervisor keeps them in the commit message.
 - Schema changes: new numbered file in `internal/db/migrations/`. Never edit a migration that has been committed.
 - Each domain package owns its SQL (`queries.sql` in the package, sqlc multi-package). Only the owning package may contain write queries for its tables.
 - Enums (statuses, kinds, channels, categories) are defined once in Go and must match the DB CHECK constraints; keep a test that compares them.

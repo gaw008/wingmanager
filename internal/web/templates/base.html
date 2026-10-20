@@ -13,6 +13,8 @@
       <ul><li><strong>wingmanager</strong></li></ul>
       {{if .SignedIn}}<ul>
         <li><a href="/">{{t .Settings.Locale "today"}}</a></li>
+        <li><a href="/properties">{{t .Settings.Locale "properties"}}</a></li>
+        <li><a href="/people">{{t .Settings.Locale "people"}}</a></li>
         <li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
         <li><form method="post" action="/logout"><button type="submit" class="outline">{{t .Settings.Locale "logout"}}</button></form></li>
       </ul>{{end}}
@@ -24,6 +26,11 @@
     {{if eq .Page "setup"}}{{template "setup" .}}{{end}}
     {{if eq .Page "login"}}{{template "login" .}}{{end}}
     {{if eq .Page "settings"}}{{template "settings" .}}{{end}}
+    {{if eq .Page "properties"}}{{template "properties" .}}{{end}}
+    {{if eq .Page "property_detail"}}{{template "property_detail" .}}{{end}}
+    {{if or (eq .Page "new_property") (eq .Page "edit_property")}}{{template "property_form" .}}{{end}}
+    {{if eq .Page "people"}}{{template "people" .}}{{end}}
+    {{if or (eq .Page "new_person") (eq .Page "edit_person")}}{{template "person_form" .}}{{end}}
   </main>
 </body>
 </html>{{end}}

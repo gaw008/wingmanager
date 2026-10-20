@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"github.com/gaw008/wingmanager/internal/auth"
+	"github.com/gaw008/wingmanager/internal/person"
+	"github.com/gaw008/wingmanager/internal/property"
 	"github.com/gaw008/wingmanager/internal/settings"
 )
 
@@ -29,11 +31,20 @@ type server struct {
 }
 
 type pageData struct {
-	Page     string
-	Settings settings.Settings
-	Locales  []string
-	SignedIn bool
-	Error    string
+	Page          string
+	Settings      settings.Settings
+	Locales       []string
+	SignedIn      bool
+	Error         string
+	Properties    []property.Property
+	Property      property.Property
+	Units         []property.Unit
+	People        []person.Person
+	Person        person.Person
+	FirstUnitName string
+	UnitName      string
+	ShowArchived  bool
+	Search        string
 }
 
 // New serves setup/login/static publicly and requires a session for every other page.
@@ -63,9 +74,12 @@ func New(database *sql.DB) (http.Handler, error) {
 	mux.HandleFunc("GET /login", s.login)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { s.render(w, r, "today", http.StatusOK, "") })
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		s.render(w, r, pageData{Page: "today"}, http.StatusOK)
+	})
 	mux.HandleFunc("GET /settings", s.editSettings)
 	mux.HandleFunc("POST /settings", s.editSettings)
+	s.registerPropertyAndPersonRoutes(mux)
 	return http.NewCrossOriginProtection().Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/static/") {
 			mux.ServeHTTP(w, r)
@@ -79,7 +93,7 @@ func New(database *sql.DB) (http.Handler, error) {
 		if r.URL.Path == "/setup" {
 			if owner {
 				if r.Method == http.MethodPost {
-					s.render(w, r, "login", http.StatusConflict, "")
+					s.render(w, r, pageData{Page: "login"}, http.StatusConflict)
 					return
 				}
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -114,19 +128,19 @@ func New(database *sql.DB) (http.Handler, error) {
 
 func (s *server) setup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.render(w, r, "setup", http.StatusOK, "")
+		s.render(w, r, pageData{Page: "setup"}, http.StatusOK)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		s.render(w, r, "setup", http.StatusBadRequest, "invalid_form")
+		s.render(w, r, pageData{Page: "setup", Error: "invalid_form"}, http.StatusBadRequest)
 		return
 	}
 	err := s.auth.Setup(r.Context(), r.PostForm.Get("email"), r.PostForm.Get("password"))
 	switch {
 	case errors.Is(err, auth.ErrSetupComplete):
-		s.render(w, r, "login", http.StatusConflict, "")
+		s.render(w, r, pageData{Page: "login"}, http.StatusConflict)
 	case errors.Is(err, auth.ErrInvalidAccount):
-		s.render(w, r, "setup", http.StatusBadRequest, "invalid_account")
+		s.render(w, r, pageData{Page: "setup", Error: "invalid_account"}, http.StatusBadRequest)
 	case err != nil:
 		s.fail(w, err)
 	default:
@@ -136,16 +150,16 @@ func (s *server) setup(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.render(w, r, "login", http.StatusOK, "")
+		s.render(w, r, pageData{Page: "login"}, http.StatusOK)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		s.render(w, r, "login", http.StatusBadRequest, "invalid_form")
+		s.render(w, r, pageData{Page: "login", Error: "invalid_form"}, http.StatusBadRequest)
 		return
 	}
 	token, expires, err := s.auth.Login(r.Context(), r.PostForm.Get("email"), r.PostForm.Get("password"))
 	if errors.Is(err, auth.ErrCredentials) {
-		s.render(w, r, "login", http.StatusUnauthorized, "invalid_credentials")
+		s.render(w, r, pageData{Page: "login", Error: "invalid_credentials"}, http.StatusUnauthorized)
 		return
 	}
 	if err != nil {
@@ -172,11 +186,11 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) editSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		s.render(w, r, "settings", http.StatusOK, "")
+		s.render(w, r, pageData{Page: "settings"}, http.StatusOK)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		s.render(w, r, "settings", http.StatusBadRequest, "invalid_form")
+		s.render(w, r, pageData{Page: "settings", Error: "invalid_form"}, http.StatusBadRequest)
 		return
 	}
 	err := settings.Save(r.Context(), s.database, settings.Settings{
@@ -185,11 +199,11 @@ func (s *server) editSettings(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, settings.ErrTimezone):
-		s.render(w, r, "settings", http.StatusBadRequest, "invalid_timezone")
+		s.render(w, r, pageData{Page: "settings", Error: "invalid_timezone"}, http.StatusBadRequest)
 	case errors.Is(err, settings.ErrLocale):
-		s.render(w, r, "settings", http.StatusBadRequest, "invalid_locale")
+		s.render(w, r, pageData{Page: "settings", Error: "invalid_locale"}, http.StatusBadRequest)
 	case errors.Is(err, settings.ErrCurrency):
-		s.render(w, r, "settings", http.StatusBadRequest, "invalid_currency")
+		s.render(w, r, pageData{Page: "settings", Error: "invalid_currency"}, http.StatusBadRequest)
 	case err != nil:
 		s.fail(w, err)
 	default:
@@ -197,14 +211,20 @@ func (s *server) editSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) render(w http.ResponseWriter, r *http.Request, page string, status int, message string) {
+func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, status int) {
 	value, err := settings.Get(r.Context(), s.database)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
+	data.Settings = value
+	data.Locales = settings.Locales()
+	data.SignedIn = data.Page != "setup" && data.Page != "login"
+	if data.Page == "new_property" && r.Method == http.MethodGet {
+		data.FirstUnitName = catalogs[value.Locale]["default_unit_name"]
+	}
 	var body bytes.Buffer
-	if err := s.templates.ExecuteTemplate(&body, "base", pageData{Page: page, Settings: value, Locales: settings.Locales(), SignedIn: page != "setup" && page != "login", Error: message}); err != nil {
+	if err := s.templates.ExecuteTemplate(&body, "base", data); err != nil {
 		s.fail(w, err)
 		return
 	}

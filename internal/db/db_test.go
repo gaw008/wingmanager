@@ -37,7 +37,7 @@ func TestMigrateTwice(t *testing.T) {
 	if err := database.QueryRow(`SELECT count(*) FROM settings`).Scan(&rows); err != nil {
 		t.Fatal(err)
 	}
-	if versions != 1 || rows != 1 {
+	if versions != 2 || rows != 1 {
 		t.Fatalf("versions=%d settings=%d", versions, rows)
 	}
 	records, err := database.Query(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
@@ -56,7 +56,7 @@ func TestMigrateTwice(t *testing.T) {
 	if err := records.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"schema_migrations", "sessions", "settings", "users"}; !reflect.DeepEqual(tables, want) {
+	if want := []string{"people", "properties", "schema_migrations", "sessions", "settings", "units", "users"}; !reflect.DeepEqual(tables, want) {
 		t.Fatalf("tables=%v want %v", tables, want)
 	}
 }
@@ -66,7 +66,7 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 	if err := Migrate(t.Context(), database); err != nil {
 		t.Fatal(err)
 	}
-	files := fstest.MapFS{"migrations/0002_failure.sql": &fstest.MapFile{Data: []byte(`CREATE TABLE partial (id INTEGER); INSERT INTO partial VALUES (1); INSERT INTO missing VALUES (1);`)}}
+	files := fstest.MapFS{"migrations/0003_failure.sql": &fstest.MapFile{Data: []byte(`CREATE TABLE partial (id INTEGER); INSERT INTO partial VALUES (1); INSERT INTO missing VALUES (1);`)}}
 	if err := migrate(t.Context(), database, files); err == nil {
 		t.Fatal("expected migration failure")
 	}
@@ -77,11 +77,11 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 	if err := database.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&versions); err != nil {
 		t.Fatal(err)
 	}
-	if partial != 0 || versions != 1 {
+	if partial != 0 || versions != 2 {
 		t.Fatalf("partial schema=%d versions=%d", partial, versions)
 	}
 	// A corrected migration can apply after rollback without resetting the database.
-	files["migrations/0002_failure.sql"].Data = []byte(`CREATE TABLE complete (id INTEGER);`)
+	files["migrations/0003_failure.sql"].Data = []byte(`CREATE TABLE complete (id INTEGER);`)
 	if err := migrate(t.Context(), database, files); err != nil {
 		t.Fatal(err)
 	}
@@ -130,5 +130,34 @@ func TestEveryConnectionConfiguredAndTransactionsImmediate(t *testing.T) {
 	if err == nil {
 		other.Rollback()
 		t.Fatal("second transaction acquired a writer lock")
+	}
+}
+
+func TestM2MigrationPreservesM1Data(t *testing.T) {
+	database := openTestDB(t)
+	// Install the committed M1 schema before applying the newly added migration.
+	script, err := migrations.ReadFile("migrations/0001_accounts.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := fstest.MapFS{"migrations/0001_accounts.sql": &fstest.MapFile{Data: script}}
+	if err := migrate(t.Context(), database, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`INSERT INTO users (email,password_hash) VALUES ('owner@example.com','existing hash'); UPDATE settings SET landlord_name = 'Owner', locale = 'en';`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(t.Context(), database); err != nil {
+		t.Fatal(err)
+	}
+	var email, hash, name, locale string
+	if err := database.QueryRow(`SELECT email, password_hash FROM users`).Scan(&email, &hash); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`SELECT landlord_name,locale FROM settings`).Scan(&name, &locale); err != nil {
+		t.Fatal(err)
+	}
+	if email != "owner@example.com" || hash != "existing hash" || name != "Owner" || locale != "en" {
+		t.Fatal("M2 migration changed M1 data")
 	}
 }

@@ -16,3 +16,19 @@ sql:
         package: settings
         out: internal/settings
         omit_unused_structs: true
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/property/queries.sql
+    gen:
+      go:
+        package: property
+        out: internal/property
+        omit_unused_structs: true
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/person/queries.sql
+    gen:
+      go:
+        package: person
+        out: internal/person
+        omit_unused_structs: true
