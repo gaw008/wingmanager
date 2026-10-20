@@ -61,14 +61,14 @@
   <h4>{{t $.Settings.Locale "feeds"}}</h4>
   {{range index $.Feeds .ID}}
   <section data-feed-id="{{.ID}}">
-    <p>{{t $.Settings.Locale .Channel}} · <span class="feed-url" title="{{.Url}}">{{.Url}}</span></p>
-    <p>{{t $.Settings.Locale "last_success"}}: {{if .LastSuccessAt.Valid}}<time>{{.LastSuccessAt.String}}</time>{{else}}{{t $.Settings.Locale "never_synced"}}{{end}}</p>
-    {{if .LastError.Valid}}<p role="alert">{{t $.Settings.Locale "sync_error"}}: {{syncError $.Settings.Locale .LastError.String}}</p>{{end}}
+    <p>{{t $.Settings.Locale .Channel}} · <span class="feed-url" title="{{.URL}}">{{.URL}}</span></p>
+    <p>{{t $.Settings.Locale "last_success"}}: {{if .LastSuccessAt}}<time>{{.LastSuccessAt}}</time>{{else}}{{t $.Settings.Locale "never_synced"}}{{end}}</p>
+    {{if .LastError}}<p role="alert">{{t $.Settings.Locale "sync_error"}}: {{syncError $.Settings.Locale .LastError}}</p>{{end}}
     <form method="post" action="/feeds/{{.ID}}/sync"><button type="submit">{{t $.Settings.Locale "sync_now"}}</button></form>
     <details><summary>{{t $.Settings.Locale "edit"}}</summary>
       <form method="post" action="/feeds/{{.ID}}/edit">
       <label>{{t $.Settings.Locale "channel"}}<select name="channel">{{$channel := .Channel}}{{range $.FeedChannels}}<option value="{{.}}" {{if eq . $channel}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>
-      <label>{{t $.Settings.Locale "feed_url"}}<input type="url" name="url" value="{{.Url}}" required></label>
+      <label>{{t $.Settings.Locale "feed_url"}}<input type="url" name="url" value="{{.URL}}" required></label>
       <button type="submit">{{t $.Settings.Locale "save"}}</button></form>
     </details>
     <form method="post" action="/feeds/{{.ID}}/remove" data-confirm="{{t $.Settings.Locale "remove_feed_hint"}}"><button type="submit" class="secondary">{{t $.Settings.Locale "remove_feed"}}</button></form>

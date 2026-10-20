@@ -54,7 +54,7 @@
 <button type="submit">{{t .Settings.Locale "save"}}</button>
 </form>
 {{if and .Booking.ID (not .Booking.Imported)}}<form method="post" action="/bookings/{{.Booking.ID}}/{{if eq .Booking.Status "cancelled"}}restore{{else}}cancel{{end}}"><button type="submit" class="secondary">{{if eq .Booking.Status "cancelled"}}{{t .Settings.Locale "restore_booking"}}{{else}}{{t .Settings.Locale "cancel_booking"}}{{end}}</button></form>{{end}}
-{{if .Cleaning}}<p data-cleaning-id="{{.Cleaning.ID}}">{{t .Settings.Locale "cleaning"}} · {{.Cleaning.DueOn.String}} · {{t .Settings.Locale .Cleaning.Status}}</p>{{end}}
+{{if .Cleaning}}<p data-cleaning-id="{{.Cleaning.ID}}">{{t .Settings.Locale "cleaning"}} · {{.Cleaning.DueOn}} · {{t .Settings.Locale .Cleaning.Status}}</p>{{end}}
 {{end}}
 
 {{define "calendar"}}

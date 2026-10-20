@@ -35,8 +35,20 @@ var (
 	ErrEmptyFeed = errors.New("warning: empty calendar; future confirmed bookings preserved")
 )
 
+// CalendarFeed is an external calendar source. Empty sync timestamps mean no
+// attempt or success yet; an empty LastError means no recorded error.
+type CalendarFeed struct {
+	ID, UnitID, SyncGeneration              int64
+	Channel, URL                            string
+	LastAttemptAt, LastSuccessAt, LastError string
+}
+
 // Channels reuses the booking channel vocabulary, excluding manual-only direct.
-func Channels() []string { return booking.Channels()[1:] }
+func Channels() []string {
+	return slices.DeleteFunc(booking.Channels(), func(channel string) bool {
+		return channel == booking.ChannelDirect
+	})
+}
 
 // Feed details use a fixed unit. Editing channel or URL invalidates in-flight
 // snapshots but retains all imported history until the next successful sync.
@@ -87,11 +99,27 @@ func Remove(ctx context.Context, database *sql.DB, id int64) error {
 
 func Get(ctx context.Context, database *sql.DB, id int64) (CalendarFeed, error) {
 	value, err := New(database).getFeed(ctx, id)
-	return value, feedError(err)
+	return fromRecord(value), feedError(err)
 }
 
 func List(ctx context.Context, database *sql.DB) ([]CalendarFeed, error) {
-	return New(database).listFeeds(ctx)
+	records, err := New(database).listFeeds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var feeds []CalendarFeed
+	for _, record := range records {
+		feeds = append(feeds, fromRecord(record))
+	}
+	return feeds, nil
+}
+
+func fromRecord(value feedRecord) CalendarFeed {
+	return CalendarFeed{
+		ID: value.ID, UnitID: value.UnitID, Channel: value.Channel, URL: value.Url,
+		SyncGeneration: value.SyncGeneration, LastAttemptAt: value.LastAttemptAt.String,
+		LastSuccessAt: value.LastSuccessAt.String, LastError: value.LastError.String,
+	}
 }
 
 func validateFeed(channel, rawURL string) error {
@@ -177,7 +205,7 @@ func (s *Service) sync(ctx context.Context, id int64) error {
 }
 
 func (s *Service) fetchAndApply(ctx context.Context, feed CalendarFeed, attempted string) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.Url, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, feed.URL, nil)
 	if err != nil {
 		return err
 	}

@@ -38,6 +38,15 @@ func (d Date) String() string {
 	return fmt.Sprintf("%04d-%02d-%02d", d.year, d.month, d.day)
 }
 
+// MidnightUTC encodes d as midnight UTC for date-only interchange formats.
+// It does not represent a local stay instant. A zero Date returns a zero time.
+func (d Date) MidnightUTC() time.Time {
+	if d.IsZero() {
+		return time.Time{}
+	}
+	return time.Date(d.year, d.month, d.day, 0, 0, 0, 0, time.UTC)
+}
+
 // AddDays performs civil arithmetic, independent of daylight saving changes.
 // A result beyond year 9999 can represent an exclusive interval endpoint.
 func (d Date) AddDays(days int) Date {

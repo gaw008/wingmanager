@@ -36,18 +36,17 @@ func Export(ctx context.Context, database *sql.DB, token string, now func() time
 		event.Props.SetText(goical.PropUID, block.uid)
 		event.Props.SetDateTime(goical.PropDateTimeStamp, now().UTC())
 		event.Props.SetText(goical.PropSummary, "Not available")
-		event.Props.SetDate(goical.PropDateTimeStart, block.from)
-		event.Props.SetDate(goical.PropDateTimeEnd, block.to)
+		event.Props.SetDate(goical.PropDateTimeStart, block.from.MidnightUTC())
+		event.Props.SetDate(goical.PropDateTimeEnd, block.to.MidnightUTC())
 		calendar.Children = append(calendar.Children, event.Component)
 	}
 	return goical.NewEncoder(writer).Encode(calendar)
 }
 
-// exportBlock contains only public occupancy. Its time values encode DATE fields;
-// they never represent check-in/check-out instants or get stored as timestamps.
+// exportBlock contains only public occupancy, with an exclusive end date.
 type exportBlock struct {
 	uid      string
-	from, to time.Time
+	from, to civildate.Date
 }
 
 // exportOccupancy is the M5 active-lease export seam: collect anonymous blocks
@@ -60,14 +59,14 @@ func exportOccupancy(ctx context.Context, database *sql.DB, unitID int64, today 
 	}
 	var blocks []exportBlock
 	for _, value := range values {
-		if value.CheckOut < today.String() {
-			continue
-		}
-		from, err := time.Parse(time.DateOnly, value.CheckIn)
+		to, err := civildate.Parse(value.CheckOut)
 		if err != nil {
 			return nil, err
 		}
-		to, err := time.Parse(time.DateOnly, value.CheckOut)
+		if to.Compare(today) < 0 {
+			continue
+		}
+		from, err := civildate.Parse(value.CheckIn)
 		if err != nil {
 			return nil, err
 		}

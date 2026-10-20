@@ -65,3 +65,19 @@ func TestDateArithmetic(t *testing.T) {
 		t.Fatal("zero Date must represent an absent date")
 	}
 }
+
+func TestMidnightUTC(t *testing.T) {
+	for _, value := range []string{"0001-01-01", "2024-02-29", "2026-03-08", "2026-11-01", "9999-12-31"} {
+		date, err := Parse(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := date.MidnightUTC()
+		if got.Format(time.DateOnly) != value || got.Location() != time.UTC || got.Hour() != 0 || got.Minute() != 0 || got.Second() != 0 || got.Nanosecond() != 0 {
+			t.Fatalf("%s midnight UTC = %v", value, got)
+		}
+	}
+	if got := (Date{}).MidnightUTC(); !got.IsZero() {
+		t.Fatalf("absent date = %v; want zero time", got)
+	}
+}

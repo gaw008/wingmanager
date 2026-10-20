@@ -8,7 +8,7 @@ import (
 	"database/sql"
 )
 
-type CalendarFeed struct {
+type feedRecord struct {
 	ID             int64
 	UnitID         int64
 	Channel        string

@@ -160,7 +160,7 @@ func TestM4SyncWarningVisibleAndCanRecover(t *testing.T) {
 	}
 	a.request(t, "POST", syncPath, nil, 303)
 	f, err := ical.Get(t.Context(), a.database, feeds[0].ID)
-	if err != nil || f.LastError.Valid {
+	if err != nil || f.LastError != "" {
 		t.Fatalf("recovery=%+v err=%v", f, err)
 	}
 }

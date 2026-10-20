@@ -114,6 +114,40 @@ func readFeed(t *testing.T, database *sql.DB, id int64) CalendarFeed {
 	}
 	return f
 }
+
+func TestFeedDomainValues(t *testing.T) {
+	database, unit, _ := setup(t)
+	id := add(t, database, unit, booking.ChannelAirbnb, "https://example.com/calendar.ics")
+	want := CalendarFeed{ID: id, UnitID: unit, Channel: booking.ChannelAirbnb, URL: "https://example.com/calendar.ics"}
+	check := func() {
+		t.Helper()
+		if got := readFeed(t, database, id); got != want {
+			t.Fatalf("Get = %+v; want %+v", got, want)
+		}
+		values, err := List(t.Context(), database)
+		if err != nil || len(values) != 1 || values[0] != want {
+			t.Fatalf("List = %+v, %v; want [%+v]", values, err, want)
+		}
+	}
+	check()
+	want.SyncGeneration = 1
+	want.LastAttemptAt = "2026-10-20T01:30:00.123Z"
+	want.LastSuccessAt = "2026-10-19T01:30:00Z"
+	want.LastError = "calendar HTTP status 500"
+	if _, err := database.Exec(`UPDATE calendar_feeds SET sync_generation=?, last_attempt_at=?, last_success_at=?, last_error=? WHERE id=?`, want.SyncGeneration, want.LastAttemptAt, want.LastSuccessAt, want.LastError, id); err != nil {
+		t.Fatal(err)
+	}
+	check()
+	if err := Edit(t.Context(), database, id, want.Channel, want.URL); err != nil {
+		t.Fatal(err)
+	}
+	want.SyncGeneration++
+	want.LastAttemptAt, want.LastSuccessAt, want.LastError = "", "", ""
+	check()
+	if _, err := Get(t.Context(), database, id+1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing feed = %v", err)
+	}
+}
 func requireCount(t *testing.T, database *sql.DB, table string, want int) {
 	t.Helper()
 	var got int
@@ -152,7 +186,7 @@ func TestNormalImportAndIdenticalSync(t *testing.T) {
 					t.Fatalf("booking=%+v", b)
 				}
 				tasks[b.ID] = cleaning(t, database, b.ID)
-				if b.Kind == booking.KindStay && (tasks[b.ID] == nil || tasks[b.ID].DueOn.String != b.CheckOut || tasks[b.ID].Title != "") {
+				if b.Kind == booking.KindStay && (tasks[b.ID] == nil || tasks[b.ID].DueOn != b.CheckOut || tasks[b.ID].Title != "") {
 					t.Fatalf("cleaning=%+v", tasks[b.ID])
 				}
 				if b.Kind == booking.KindBlock && tasks[b.ID] != nil {
@@ -188,7 +222,7 @@ func TestNormalImportAndIdenticalSync(t *testing.T) {
 					t.Fatal("identical sync changed tasks")
 				}
 			}
-			if f := readFeed(t, database, id); f.SyncGeneration != 2 || !f.LastSuccessAt.Valid || f.LastError.Valid {
+			if f := readFeed(t, database, id); f.SyncGeneration != 2 || f.LastSuccessAt == "" || f.LastError != "" {
 				t.Fatalf("feed=%+v", f)
 			}
 		})
@@ -215,7 +249,7 @@ func TestDisappearanceDateChangeReappearanceAndOwnerFields(t *testing.T) {
 	body = changed
 	syncOK(t, s, id)
 	updated := bookings(t, database)[1]
-	if updated.CheckOut != "2026-11-05" || updated.GuestID != guest || updated.Notes != "Owner-only notes" || cleaning(t, database, future.ID).DueOn.String != "2026-11-05" {
+	if updated.CheckOut != "2026-11-05" || updated.GuestID != guest || updated.Notes != "Owner-only notes" || cleaning(t, database, future.ID).DueOn != "2026-11-05" {
 		t.Fatalf("updated=%+v", updated)
 	}
 	// Retain one block, so disappearance is distinct from the empty-feed guard.
@@ -229,7 +263,7 @@ func TestDisappearanceDateChangeReappearanceAndOwnerFields(t *testing.T) {
 	body = initial
 	syncOK(t, s, id)
 	restored := bookings(t, database)[1]
-	if restored.ID != future.ID || restored.Status != booking.StatusConfirmed || restored.GuestID != guest || restored.Notes != "Owner-only notes" || cleaning(t, database, future.ID).Status != task.StatusOpen || cleaning(t, database, future.ID).DueOn.String != future.CheckOut {
+	if restored.ID != future.ID || restored.Status != booking.StatusConfirmed || restored.GuestID != guest || restored.Notes != "Owner-only notes" || cleaning(t, database, future.ID).Status != task.StatusOpen || cleaning(t, database, future.ID).DueOn != future.CheckOut {
 		t.Fatalf("restored=%+v", restored)
 	}
 	requireCount(t, database, "tasks", 2)
@@ -291,7 +325,7 @@ func TestScenarioOneAndSizeLimitPreserveBookings(t *testing.T) {
 				t.Fatal("failure changed occupancy or tasks")
 			}
 			f := readFeed(t, database, id)
-			if f.SyncGeneration != prior.SyncGeneration || !f.LastError.Valid || !f.LastAttemptAt.Valid || f.LastSuccessAt != prior.LastSuccessAt {
+			if f.SyncGeneration != prior.SyncGeneration || f.LastError == "" || f.LastAttemptAt == "" || f.LastSuccessAt != prior.LastSuccessAt {
 				t.Fatalf("failure status=%+v", f)
 			}
 		})
@@ -313,7 +347,7 @@ func TestPartialApplyRollsBackAndRecordsFailure(t *testing.T) {
 	requireCount(t, database, "bookings", 0)
 	requireCount(t, database, "tasks", 0)
 	f := readFeed(t, database, id)
-	if f.SyncGeneration != 0 || f.LastSuccessAt.Valid || !f.LastError.Valid {
+	if f.SyncGeneration != 0 || f.LastSuccessAt != "" || f.LastError == "" {
 		t.Fatalf("feed=%+v", f)
 	}
 }
@@ -351,7 +385,7 @@ func TestStaleSnapshotAfterEditIsDiscarded(t *testing.T) {
 	if !reflect.DeepEqual(before, bookings(t, database)) || !reflect.DeepEqual(oldTask, cleaning(t, database, before[1].ID)) {
 		t.Fatal("stale snapshot changed bookings or tasks")
 	}
-	if f := readFeed(t, database, id); f.SyncGeneration != 2 || f.LastError.Valid || f.LastAttemptAt.Valid {
+	if f := readFeed(t, database, id); f.SyncGeneration != 2 || f.LastError != "" || f.LastAttemptAt != "" {
 		t.Fatalf("stale result overwrote edited status: %+v", f)
 	}
 }
@@ -501,6 +535,44 @@ func TestExportPrivacyDatesAndStableUIDs(t *testing.T) {
 	}
 	if err := Export(t.Context(), database, token, clock, io.Discard); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestExportCivilDateBoundaries(t *testing.T) {
+	for _, dates := range []struct{ from, to string }{
+		{"2024-02-28", "2024-03-01"},
+		{"2026-03-07", "2026-03-09"},
+		{"2026-10-31", "2026-11-02"},
+		{"2026-12-31", "2027-01-01"},
+	} {
+		t.Run(dates.from, func(t *testing.T) {
+			database, unit, _ := setup(t)
+			if _, err := booking.Create(t.Context(), database, booking.Details{UnitID: unit, Kind: booking.KindBlock, Channel: booking.ChannelDirect, CheckIn: dates.from, CheckOut: dates.to}); err != nil {
+				t.Fatal(err)
+			}
+			u, err := property.GetUnit(t.Context(), database, unit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			now := func() time.Time { return time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC) }
+			if err := Export(t.Context(), database, u.IcalExportToken, now, &output); err != nil {
+				t.Fatal(err)
+			}
+			calendar, err := goical.NewDecoder(&output).Decode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(calendar.Events()) != 1 {
+				t.Fatalf("events = %d; want 1", len(calendar.Events()))
+			}
+			for prop, want := range map[string]string{goical.PropDateTimeStart: dates.from, goical.PropDateTimeEnd: dates.to} {
+				got := calendar.Events()[0].Props.Get(prop)
+				if got.ValueType() != goical.ValueDate || got.Value != strings.ReplaceAll(want, "-", "") {
+					t.Fatalf("%s = %+v; want DATE %s", prop, got, want)
+				}
+			}
+		})
 	}
 }
 

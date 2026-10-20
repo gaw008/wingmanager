@@ -50,6 +50,8 @@ sql:
         package: task
         out: internal/task
         omit_unused_structs: true
+        rename:
+          task: taskRecord
   - engine: sqlite
     schema: internal/db/migrations
     queries: internal/ical/queries.sql
@@ -58,3 +60,5 @@ sql:
         package: ical
         out: internal/ical
         omit_unused_structs: true
+        rename:
+          calendar_feed: feedRecord

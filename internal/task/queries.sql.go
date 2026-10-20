@@ -29,9 +29,9 @@ const cleaningForBooking = `-- name: cleaningForBooking :one
 SELECT id, property_id, unit_id, booking_id, kind, title, due_on, status, assignee, notes, done_at FROM tasks WHERE booking_id = ? AND kind = 'cleaning'
 `
 
-func (q *Queries) cleaningForBooking(ctx context.Context, bookingID sql.NullInt64) (Task, error) {
+func (q *Queries) cleaningForBooking(ctx context.Context, bookingID sql.NullInt64) (taskRecord, error) {
 	row := q.db.QueryRowContext(ctx, cleaningForBooking, bookingID)
-	var i Task
+	var i taskRecord
 	err := row.Scan(
 		&i.ID,
 		&i.PropertyID,

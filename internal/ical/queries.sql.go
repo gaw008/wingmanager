@@ -63,9 +63,9 @@ const getFeed = `-- name: getFeed :one
 SELECT id, unit_id, channel, url, sync_generation, last_attempt_at, last_success_at, last_error FROM calendar_feeds WHERE id = ?
 `
 
-func (q *Queries) getFeed(ctx context.Context, id int64) (CalendarFeed, error) {
+func (q *Queries) getFeed(ctx context.Context, id int64) (feedRecord, error) {
 	row := q.db.QueryRowContext(ctx, getFeed, id)
-	var i CalendarFeed
+	var i feedRecord
 	err := row.Scan(
 		&i.ID,
 		&i.UnitID,
@@ -83,15 +83,15 @@ const listFeeds = `-- name: listFeeds :many
 SELECT id, unit_id, channel, url, sync_generation, last_attempt_at, last_success_at, last_error FROM calendar_feeds ORDER BY id
 `
 
-func (q *Queries) listFeeds(ctx context.Context) ([]CalendarFeed, error) {
+func (q *Queries) listFeeds(ctx context.Context) ([]feedRecord, error) {
 	rows, err := q.db.QueryContext(ctx, listFeeds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []CalendarFeed
+	var items []feedRecord
 	for rows.Next() {
-		var i CalendarFeed
+		var i feedRecord
 		if err := rows.Scan(
 			&i.ID,
 			&i.UnitID,

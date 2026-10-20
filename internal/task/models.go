@@ -8,7 +8,7 @@ import (
 	"database/sql"
 )
 
-type Task struct {
+type taskRecord struct {
 	ID         int64
 	PropertyID int64
 	UnitID     sql.NullInt64

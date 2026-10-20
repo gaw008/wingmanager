@@ -171,7 +171,7 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 				s.fail(w, err)
 				return
 			}
-			data.SourceURL = feed.Url
+			data.SourceURL = feed.URL
 		}
 	} else {
 		data.Booking.Kind, data.Booking.Channel, data.Booking.Status = booking.KindStay, booking.ChannelDirect, booking.StatusConfirmed

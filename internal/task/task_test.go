@@ -48,6 +48,37 @@ func cleaning(t *testing.T, database *sql.DB, id int64) *task.Task {
 	return value
 }
 
+func TestCleaningDomainValues(t *testing.T) {
+	database, unit := setup(t)
+	id, err := booking.Create(t.Context(), database, booking.Details{UnitID: unit, Kind: booking.KindStay, Channel: booking.ChannelDirect, CheckIn: "2026-11-01", CheckOut: "2026-11-04"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := property.GetUnit(t.Context(), database, unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := cleaning(t, database, id)
+	want := task.Task{ID: initial.ID, PropertyID: u.PropertyID, UnitID: unit, BookingID: id, Kind: task.KindCleaning, DueOn: "2026-11-04", Status: task.StatusOpen}
+	if *initial != want {
+		t.Fatalf("cleaning = %+v; want %+v", initial, want)
+	}
+	if _, err := database.Exec(`UPDATE tasks SET unit_id=NULL, due_on=NULL WHERE id=?`, initial.ID); err != nil {
+		t.Fatal(err)
+	}
+	want.UnitID, want.DueOn = 0, ""
+	if got := cleaning(t, database, id); *got != want {
+		t.Fatalf("nullable cleaning = %+v; want %+v", got, want)
+	}
+	want.Status, want.Title, want.Assignee, want.Notes, want.DoneAt = task.StatusDone, "Cleaning", "Cleaner", "Completed work", "2026-11-04T12:00:00Z"
+	if _, err := database.Exec(`UPDATE tasks SET status=?, title=?, assignee=?, notes=?, done_at=? WHERE id=?`, want.Status, want.Title, want.Assignee, want.Notes, want.DoneAt, want.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := cleaning(t, database, id); *got != want {
+		t.Fatalf("completed cleaning = %+v; want %+v", got, want)
+	}
+}
+
 func TestManualStayCleaningLifecycleAndCompletedHistory(t *testing.T) {
 	database, unit := setup(t)
 	value := booking.Details{UnitID: unit, Kind: booking.KindStay, Channel: booking.ChannelDirect, CheckIn: "2026-11-01", CheckOut: "2026-11-04"}
@@ -56,7 +87,7 @@ func TestManualStayCleaningLifecycleAndCompletedHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	initial := cleaning(t, database, id)
-	if initial == nil || initial.Status != task.StatusOpen || initial.DueOn.String != value.CheckOut || initial.Title != "" {
+	if initial == nil || initial.Status != task.StatusOpen || initial.DueOn != value.CheckOut || initial.Title != "" {
 		t.Fatalf("task=%+v", initial)
 	}
 	for range 2 {
@@ -71,7 +102,7 @@ func TestManualStayCleaningLifecycleAndCompletedHistory(t *testing.T) {
 	if err := booking.Update(t.Context(), database, id, value); err != nil {
 		t.Fatal(err)
 	}
-	if c := cleaning(t, database, id); c.Status != task.StatusCancelled || c.DueOn.String != value.CheckOut {
+	if c := cleaning(t, database, id); c.Status != task.StatusCancelled || c.DueOn != value.CheckOut {
 		t.Fatalf("cancelled edit=%+v", c)
 	}
 	for range 2 {
@@ -83,7 +114,7 @@ func TestManualStayCleaningLifecycleAndCompletedHistory(t *testing.T) {
 	if err := booking.Update(t.Context(), database, id, value); err != nil {
 		t.Fatal(err)
 	}
-	if c := cleaning(t, database, id); c.Status != task.StatusOpen || c.DueOn.String != value.CheckOut || c.ID != initial.ID {
+	if c := cleaning(t, database, id); c.Status != task.StatusOpen || c.DueOn != value.CheckOut || c.ID != initial.ID {
 		t.Fatalf("restored/edit=%+v", c)
 	}
 	// Move unfinished work with a manual booking, including to another property.
@@ -99,7 +130,7 @@ func TestManualStayCleaningLifecycleAndCompletedHistory(t *testing.T) {
 	if err := booking.Update(t.Context(), database, id, value); err != nil {
 		t.Fatal(err)
 	}
-	if c := cleaning(t, database, id); c.PropertyID != p || c.UnitID.Int64 != value.UnitID {
+	if c := cleaning(t, database, id); c.PropertyID != p || c.UnitID != value.UnitID {
 		t.Fatalf("moved=%+v", c)
 	}
 	if _, err := database.Exec(`UPDATE tasks SET status='done',done_at='2026-11-06T12:00:00Z',notes='Completed work',assignee='Cleaner' WHERE id=?`, initial.ID); err != nil {

@@ -67,7 +67,7 @@ func TestStartupSyncAndCancellationStopsInflightRequest(t *testing.T) {
 	}
 	// Reaching feed three proves feed two committed before it, despite feed one's failure.
 	feeds, err := ical.List(t.Context(), database)
-	if err != nil || feeds[1].SyncGeneration != 1 || !feeds[0].LastError.Valid {
+	if err != nil || feeds[1].SyncGeneration != 1 || feeds[0].LastError == "" {
 		t.Fatalf("feeds=%v err=%v", feeds, err)
 	}
 	cancel()

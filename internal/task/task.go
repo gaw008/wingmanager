@@ -19,6 +19,15 @@ const (
 func Kinds() []string    { return []string{KindCleaning, KindMaintenance, KindOther} }
 func Statuses() []string { return []string{StatusOpen, StatusDone, StatusCancelled} }
 
+// Task is work for a property. Zero UnitID or BookingID means no association;
+// empty DueOn or DoneAt means no due date or completion timestamp, respectively.
+// DueOn is a canonical YYYY-MM-DD date.
+type Task struct {
+	ID, PropertyID, UnitID, BookingID int64
+	Kind, Title, DueOn, Status        string
+	Assignee, Notes, DoneAt           string
+}
+
 // EnsureCleaning creates or reopens the booking's cleaning task, moving unfinished
 // work to its current unit and checkout date. Unconfirmed stays keep cancelled
 // work; completed work is immutable.
@@ -44,5 +53,10 @@ func CleaningForBooking(ctx context.Context, database *sql.DB, bookingID int64) 
 	if err != nil {
 		return nil, err
 	}
-	return &value, nil
+	return &Task{
+		ID: value.ID, PropertyID: value.PropertyID, UnitID: value.UnitID.Int64,
+		BookingID: value.BookingID.Int64, Kind: value.Kind, Title: value.Title,
+		DueOn: value.DueOn.String, Status: value.Status, Assignee: value.Assignee,
+		Notes: value.Notes, DoneAt: value.DoneAt.String,
+	}, nil
 }
