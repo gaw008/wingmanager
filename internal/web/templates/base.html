@@ -1,0 +1,29 @@
+{{define "base"}}<!doctype html>
+<html lang="{{.Settings.Locale}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{t .Settings.Locale .Page}} · wingmanager</title>
+  <link rel="stylesheet" href="/static/pico-2.0.6.min.css">
+  <script src="/static/htmx-2.0.4.min.js" defer></script>
+</head>
+<body>
+  <header class="container">
+    <nav aria-label="wingmanager">
+      <ul><li><strong>wingmanager</strong></li></ul>
+      {{if .SignedIn}}<ul>
+        <li><a href="/">{{t .Settings.Locale "today"}}</a></li>
+        <li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
+        <li><form method="post" action="/logout"><button type="submit" class="outline">{{t .Settings.Locale "logout"}}</button></form></li>
+      </ul>{{end}}
+    </nav>
+  </header>
+  <main class="container">
+    <h1>{{t .Settings.Locale .Page}}</h1>
+    {{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+    {{if eq .Page "setup"}}{{template "setup" .}}{{end}}
+    {{if eq .Page "login"}}{{template "login" .}}{{end}}
+    {{if eq .Page "settings"}}{{template "settings" .}}{{end}}
+  </main>
+</body>
+</html>{{end}}

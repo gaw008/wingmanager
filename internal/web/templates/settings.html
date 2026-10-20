@@ -1,0 +1,15 @@
+{{define "settings"}}
+<form method="post" action="/settings">
+  <label for="landlord_name">{{t .Settings.Locale "landlord_name"}}</label>
+  <input id="landlord_name" name="landlord_name" value="{{.Settings.LandlordName}}" autocomplete="name">
+  <label for="timezone">{{t .Settings.Locale "timezone"}}</label>
+  <input id="timezone" name="timezone" value="{{.Settings.Timezone}}" required>
+  <label for="currency">{{t .Settings.Locale "currency"}}</label>
+  <input id="currency" name="currency" value="{{.Settings.Currency}}" required>
+  <label for="locale">{{t .Settings.Locale "locale"}}</label>
+  <select id="locale" name="locale">{{range .Locales}}
+    <option value="{{.}}" {{if eq . $.Settings.Locale}}selected{{end}}>{{.}}</option>
+  {{end}}</select>
+  <button type="submit">{{t .Settings.Locale "save"}}</button>
+</form>
+{{end}}

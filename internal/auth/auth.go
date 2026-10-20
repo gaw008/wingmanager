@@ -1,0 +1,108 @@
+// Package auth owns the single owner account and hashed session credentials.
+package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
+	"errors"
+	"net/mail"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+// Sessions last seven days, balancing daily use with a bounded login lifetime.
+const sessionDuration = 7 * 24 * time.Hour
+
+var (
+	ErrSetupComplete  = errors.New("owner already exists")
+	ErrInvalidAccount = errors.New("invalid email or password")
+	ErrCredentials    = errors.New("incorrect email or password")
+)
+
+type Service struct {
+	database *sql.DB
+	queries  *Queries
+}
+
+// NewService uses a database opened by db.Open so setup transactions are IMMEDIATE.
+func NewService(database *sql.DB) *Service {
+	return &Service{database: database, queries: New(database)}
+}
+
+// HasOwner reports whether first-run setup has completed.
+func (s *Service) HasOwner(ctx context.Context) (bool, error) {
+	return s.queries.hasOwner(ctx)
+}
+
+// Setup creates the only owner; concurrent attempts return ErrSetupComplete.
+func (s *Service) Setup(ctx context.Context, email, password string) error {
+	email = strings.TrimSpace(email)
+	address, err := mail.ParseAddress(email)
+	if err != nil || address.Address != email || password == "" || len(password) > 72 {
+		return ErrInvalidAccount
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	tx, err := s.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	queries := s.queries.WithTx(tx)
+	exists, err := queries.hasOwner(ctx)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return ErrSetupComplete
+	}
+	if err := queries.createOwner(ctx, createOwnerParams{Email: email, PasswordHash: string(hash)}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// Login issues a new opaque token; only its SHA-256 credential hash is persisted.
+func (s *Service) Login(ctx context.Context, email, password string) (token string, expires time.Time, err error) {
+	user, err := s.queries.findUser(ctx, strings.TrimSpace(email))
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", time.Time{}, ErrCredentials
+	}
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return "", time.Time{}, ErrCredentials
+		}
+		return "", time.Time{}, err
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", time.Time{}, err
+	}
+	token = base64.RawURLEncoding.EncodeToString(secret)
+	hash := sha256.Sum256([]byte(token))
+	expires = time.Now().UTC().Add(sessionDuration)
+	err = s.queries.createSession(ctx, createSessionParams{TokenHash: hash[:], UserID: user.ID, ExpiresAt: expires.Format(time.RFC3339)})
+	return token, expires, err
+}
+
+// Authenticated accepts only an unexpired session token.
+func (s *Service) Authenticated(ctx context.Context, token string) (bool, error) {
+	hash := sha256.Sum256([]byte(token))
+	return s.queries.sessionExists(ctx, sessionExistsParams{TokenHash: hash[:], ExpiresAt: time.Now().UTC().Format(time.RFC3339)})
+}
+
+// Logout invalidates the token; repeating logout is harmless.
+func (s *Service) Logout(ctx context.Context, token string) error {
+	hash := sha256.Sum256([]byte(token))
+	return s.queries.deleteSession(ctx, hash[:])
+}

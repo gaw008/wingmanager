@@ -1,0 +1,18 @@
+version: "2"
+sql:
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/auth/queries.sql
+    gen:
+      go:
+        package: auth
+        out: internal/auth
+        omit_unused_structs: true
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/settings/queries.sql
+    gen:
+      go:
+        package: settings
+        out: internal/settings
+        omit_unused_structs: true
