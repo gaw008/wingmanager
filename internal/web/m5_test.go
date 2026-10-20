@@ -97,19 +97,3 @@ func TestM5RoutesAuthenticationAndOrigin(t *testing.T) {
 		}
 	}
 }
-func TestDecimalMoney(t *testing.T) {
-	for raw, want := range map[string]int64{"0": 0, "1.2": 120, "123.45": 12345, "92233720368547758.07": 9223372036854775807} {
-		got, err := parseMoney(raw)
-		if err != nil || got != want {
-			t.Fatalf("%q %d %v", raw, got, err)
-		}
-	}
-	for _, raw := range []string{"", "-1", "1.234", "1e2", "NaN", "1.", ".20", "92233720368547758.08", "92233720368547759", "+1"} {
-		if _, err := parseMoney(raw); err == nil {
-			t.Fatalf("accepted %q", raw)
-		}
-	}
-	if money(-125) != "-1.25" || money(1) != "0.01" {
-		t.Fatal("formatting")
-	}
-}

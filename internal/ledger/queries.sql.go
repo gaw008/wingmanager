@@ -38,6 +38,104 @@ func (q *Queries) createEntry(ctx context.Context, arg createEntryParams) (int64
 	return id, err
 }
 
+const createPropertyEntry = `-- name: createPropertyEntry :one
+INSERT INTO ledger_entries (property_id, booking_id, kind, category, amount_cents, occurred_on, memo)
+SELECT p.id, ?1, ?2, ?3, ?4, ?5, ?6
+FROM properties p WHERE p.id = ?7
+AND (?1 IS NULL OR EXISTS (
+ SELECT 1 FROM bookings b JOIN units u ON u.id = b.unit_id
+ WHERE b.id = ?1 AND u.property_id = p.id AND b.kind = 'stay'
+)) RETURNING id
+`
+
+type createPropertyEntryParams struct {
+	BookingID   sql.NullInt64
+	Kind        string
+	Category    string
+	AmountCents int64
+	OccurredOn  string
+	Memo        string
+	PropertyID  int64
+}
+
+func (q *Queries) createPropertyEntry(ctx context.Context, arg createPropertyEntryParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createPropertyEntry,
+		arg.BookingID,
+		arg.Kind,
+		arg.Category,
+		arg.AmountCents,
+		arg.OccurredOn,
+		arg.Memo,
+		arg.PropertyID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const filteredEntries = `-- name: filteredEntries :many
+SELECT e.id, e.property_id, e.lease_id, e.booking_id, e.kind, e.category, e.amount_cents, e.occurred_on, e.period, e.memo, e.voided_at, e.void_reason, e.created_at, p.name AS property_name FROM ledger_entries e JOIN properties p ON p.id = e.property_id
+WHERE (?1 = 0 OR e.property_id = ?1)
+ AND e.occurred_on >= ?2 AND e.occurred_on <= ?3
+ AND (?4 = '' OR e.kind = ?4)
+ORDER BY e.occurred_on, e.id
+`
+
+type filteredEntriesParams struct {
+	PropertyID interface{}
+	FromDate   string
+	ToDate     string
+	Kind       interface{}
+}
+
+type filteredEntriesRow struct {
+	EntryRecord  entryRecord
+	PropertyName string
+}
+
+func (q *Queries) filteredEntries(ctx context.Context, arg filteredEntriesParams) ([]filteredEntriesRow, error) {
+	rows, err := q.db.QueryContext(ctx, filteredEntries,
+		arg.PropertyID,
+		arg.FromDate,
+		arg.ToDate,
+		arg.Kind,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []filteredEntriesRow
+	for rows.Next() {
+		var i filteredEntriesRow
+		if err := rows.Scan(
+			&i.EntryRecord.ID,
+			&i.EntryRecord.PropertyID,
+			&i.EntryRecord.LeaseID,
+			&i.EntryRecord.BookingID,
+			&i.EntryRecord.Kind,
+			&i.EntryRecord.Category,
+			&i.EntryRecord.AmountCents,
+			&i.EntryRecord.OccurredOn,
+			&i.EntryRecord.Period,
+			&i.EntryRecord.Memo,
+			&i.EntryRecord.VoidedAt,
+			&i.EntryRecord.VoidReason,
+			&i.EntryRecord.CreatedAt,
+			&i.PropertyName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEntry = `-- name: getEntry :one
 SELECT id, property_id, lease_id, booking_id, kind, category, amount_cents, occurred_on, period, memo, voided_at, void_reason, created_at FROM ledger_entries WHERE id = ?
 `
@@ -125,6 +223,38 @@ func (q *Queries) postRent(ctx context.Context, arg postRentParams) error {
 		arg.ID,
 	)
 	return err
+}
+
+const reportProperties = `-- name: reportProperties :many
+SELECT id, name FROM properties WHERE (?1 = 0 OR id = ?1) ORDER BY id
+`
+
+type reportPropertiesRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) reportProperties(ctx context.Context, propertyID interface{}) ([]reportPropertiesRow, error) {
+	rows, err := q.db.QueryContext(ctx, reportProperties, propertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []reportPropertiesRow
+	for rows.Next() {
+		var i reportPropertiesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const voidEntry = `-- name: voidEntry :exec

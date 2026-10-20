@@ -16,6 +16,7 @@ import (
 
 	"github.com/gaw008/wingmanager/internal/auth"
 	"github.com/gaw008/wingmanager/internal/ical"
+	"github.com/gaw008/wingmanager/internal/money"
 	"github.com/gaw008/wingmanager/internal/person"
 	"github.com/gaw008/wingmanager/internal/property"
 	"github.com/gaw008/wingmanager/internal/settings"
@@ -52,6 +53,7 @@ type pageData struct {
 	bookingPage
 	feedPage
 	leasePage
+	moneyPage
 }
 
 // New serves setup/login/static and tokenized iCal exports publicly. All other
@@ -63,7 +65,7 @@ func New(database *sql.DB, service *ical.Service) (http.Handler, error) {
 
 func newHandler(database *sql.DB, now func() time.Time, service *ical.Service) (http.Handler, error) {
 	templates, err := template.New("pages").Funcs(template.FuncMap{
-		"money":           money,
+		"money":           money.Format,
 		"calendarColumns": func(days int) int { return days + 1 },
 		"syncError": func(locale, message string) string {
 			if message == ical.ErrEmptyFeed.Error() {
@@ -103,6 +105,7 @@ func newHandler(database *sql.DB, now func() time.Time, service *ical.Service) (
 	s.registerBookingRoutes(mux)
 	s.registerFeedRoutes(mux)
 	s.registerLeaseRoutes(mux)
+	s.registerMoneyRoutes(mux)
 	return http.NewCrossOriginProtection().Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/static/") || strings.HasPrefix(r.URL.Path, "/ical/") {
 			mux.ServeHTTP(w, r)

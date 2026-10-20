@@ -1,0 +1,45 @@
+{{define "money_filters"}}
+<form method="get">
+ <div class="grid">
+  <label>{{t .Settings.Locale "properties"}}<select name="property"><option value="0">{{t .Settings.Locale "all_properties"}}</option>{{range .Properties}}<option value="{{.ID}}" {{if eq $.MoneyFilter.PropertyID .ID}}selected{{end}}>{{.Name}}{{if .ArchivedAt}} ({{t $.Settings.Locale "archived"}}){{end}}</option>{{end}}</select></label>
+  <label>{{t .Settings.Locale "year"}}<input name="year" type="number" min="1" max="9999" value="{{.MoneyFilter.Year}}" required></label>
+  {{if eq .Page "money"}}<label>{{t .Settings.Locale "entry_kind"}}<select name="kind"><option value="">{{t .Settings.Locale "all_kinds"}}</option>{{range .MoneyKinds}}<option value="{{.}}" {{if eq $.MoneyFilter.Kind .}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>{{end}}
+ </div>
+ <button type="submit">{{t .Settings.Locale "apply"}}</button>
+</form>
+{{end}}
+
+{{define "money_entries"}}
+<p><a href="/money/expense">{{t .Settings.Locale "add_expense"}}</a> · <a href="/money/income">{{t .Settings.Locale "add_income"}}</a> · <a href="/reports?year={{.MoneyFilter.Year}}&amp;property={{.MoneyFilter.PropertyID}}">{{t .Settings.Locale "reports"}}</a></p>
+{{template "money_filters" .}}
+<div class="overflow-auto"><table>
+ <thead><tr><th>{{t .Settings.Locale "occurred_on"}}</th><th>{{t .Settings.Locale "properties"}}</th><th>{{t .Settings.Locale "entry_kind"}}</th><th>{{t .Settings.Locale "category"}}</th><th>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})</th><th>{{t .Settings.Locale "notes"}}</th><th>{{t .Settings.Locale "void_entry"}}</th></tr></thead>
+ <tbody>{{range .MoneyEntries}}<tr data-entry-id="{{.ID}}"><td>{{.OccurredOn}}</td><td>{{.PropertyName}}</td><td>{{t $.Settings.Locale .Kind}}</td><td>{{t $.Settings.Locale .Category}}</td><td>{{money .AmountCents}}</td><td>{{.Memo}}{{if .LeaseID}} <a href="/leases/{{.LeaseID}}">{{t $.Settings.Locale "lease"}} #{{.LeaseID}}</a>{{end}}{{if .BookingID}} <a href="/bookings/{{.BookingID}}">{{t $.Settings.Locale "booking_label"}} #{{.BookingID}}</a>{{end}}</td><td>{{if .VoidedAt}}{{t $.Settings.Locale "voided"}}: {{.VoidReason}}{{else if not .Period}}<form method="post" action="/money/{{.ID}}/void?year={{$.MoneyFilter.Year}}&amp;property={{$.MoneyFilter.PropertyID}}&amp;kind={{$.MoneyFilter.Kind}}"><label>{{t $.Settings.Locale "void_reason"}}<input name="reason" required></label><button type="submit" class="secondary">{{t $.Settings.Locale "void_entry"}}</button></form>{{end}}</td></tr>{{else}}<tr><td colspan="7">{{t .Settings.Locale "no_entries"}}</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}
+
+{{define "money_form"}}
+<form method="post">
+ <label>{{t .Settings.Locale "properties"}}<select name="property_id" required><option value="">{{t .Settings.Locale "properties"}}</option>{{range .Properties}}<option value="{{.ID}}" {{if eq $.MoneyEntry.PropertyID .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+ <label>{{t .Settings.Locale "category"}}<select name="category" required>{{range .MoneyCategories}}<option value="{{.}}" {{if eq $.MoneyEntry.Category .}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>
+ <div class="grid"><label>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})<input name="amount" type="number" min="0.01" step="0.01" value="{{money .MoneyEntry.AmountCents}}" required></label><label>{{t .Settings.Locale "occurred_on"}}<input name="occurred_on" type="date" value="{{.MoneyEntry.OccurredOn}}" required></label></div>
+ {{if eq .MoneyEntry.Kind "income"}}<label>{{t .Settings.Locale "booking_optional"}}<select name="booking_id"><option value="">{{t .Settings.Locale "no_booking"}}</option>{{range .MoneyBookings}}{{if eq .Kind "stay"}}<option value="{{.ID}}" {{if eq $.MoneyEntry.BookingID .ID}}selected{{end}}>#{{.ID}} · {{.UnitLabel}} · {{.CheckIn}} → {{.CheckOut}}</option>{{end}}{{end}}</select></label>{{end}}
+ <label>{{t .Settings.Locale "notes"}}<textarea name="memo">{{.MoneyEntry.Memo}}</textarea></label>
+ <button type="submit">{{t .Settings.Locale "save"}}</button>
+</form>
+{{end}}
+
+{{define "money_report"}}
+{{template "money_filters" .}}
+<p>{{t .Settings.Locale "cash_basis"}}</p>
+<p role="note">{{t .Settings.Locale "schedule_e_disclaimer"}}</p>
+<p><a href="/reports/schedule-e.csv?year={{.MoneyFilter.Year}}&amp;property={{.MoneyFilter.PropertyID}}">{{t .Settings.Locale "schedule_e_csv"}}</a> · <a href="/reports/ledger.csv?year={{.MoneyFilter.Year}}&amp;property={{.MoneyFilter.PropertyID}}">{{t .Settings.Locale "ledger_csv"}}</a></p>
+<dl><dt>{{t .Settings.Locale "income"}} ({{.Settings.Currency}})</dt><dd id="report-income">{{money .MoneyReport.IncomeCents}}</dd><dt>{{t .Settings.Locale "expense"}}</dt><dd id="report-expense">{{money .MoneyReport.ExpenseCents}}</dd><dt>{{t .Settings.Locale "net"}}</dt><dd id="report-net">{{money .MoneyReport.NetCents}}</dd></dl>
+<h2>{{t .Settings.Locale "income"}}</h2>
+<p>{{t .Settings.Locale "payment_methods"}}</p>
+<div class="overflow-auto"><table><thead><tr><th>{{t .Settings.Locale "category"}}</th><th>{{t .Settings.Locale "schedule_e_line"}}</th><th>{{t .Settings.Locale "year_total"}}</th>{{range .MoneyReport.Months}}<th>{{.Month}}</th>{{end}}</tr></thead><tbody>{{range .MoneyReport.Income}}<tr><th>{{t $.Settings.Locale .Category}}</th><td>{{.Line}}</td><td>{{money .AmountCents}}</td>{{range .MonthlyCents}}<td>{{money .}}</td>{{end}}</tr>{{end}}</tbody></table></div>
+<h2>{{t .Settings.Locale "expense"}}</h2>
+<div class="overflow-auto"><table><thead><tr><th>{{t .Settings.Locale "category"}}</th><th>{{t .Settings.Locale "schedule_e_line"}}</th><th>{{t .Settings.Locale "year_total"}}</th>{{range .MoneyReport.Months}}<th>{{.Month}}</th>{{end}}</tr></thead><tbody>{{range .MoneyReport.Expenses}}<tr><th>{{t $.Settings.Locale .Category}}</th><td>{{.Line}}</td><td>{{money .AmountCents}}</td>{{range .MonthlyCents}}<td>{{money .}}</td>{{end}}</tr>{{end}}</tbody></table></div>
+<h2>{{t .Settings.Locale "monthly_breakdown"}}</h2>
+<table><thead><tr><th>{{t .Settings.Locale "month"}}</th><th>{{t .Settings.Locale "income"}}</th><th>{{t .Settings.Locale "expense"}}</th><th>{{t .Settings.Locale "net"}}</th></tr></thead><tbody>{{range .MoneyReport.Months}}<tr><th>{{.Month}}</th><td>{{money .IncomeCents}}</td><td>{{money .ExpenseCents}}</td><td>{{money .NetCents}}</td></tr>{{end}}</tbody></table>
+{{end}}

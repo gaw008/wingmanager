@@ -8,6 +8,7 @@ import (
 
 	"github.com/gaw008/wingmanager/internal/lease"
 	"github.com/gaw008/wingmanager/internal/ledger"
+	"github.com/gaw008/wingmanager/internal/money"
 	"github.com/gaw008/wingmanager/internal/person"
 	"github.com/gaw008/wingmanager/internal/settings"
 )
@@ -179,11 +180,11 @@ func parseLease(r *http.Request) (lease.Details, error) {
 	if err != nil {
 		return v, lease.ErrInvalid
 	}
-	v.RentCents, err = parseMoney(r.PostForm.Get("rent"))
+	v.RentCents, err = money.Parse(r.PostForm.Get("rent"))
 	if err != nil {
 		return v, err
 	}
-	v.DepositCents, err = parseMoney(r.PostForm.Get("deposit"))
+	v.DepositCents, err = money.Parse(r.PostForm.Get("deposit"))
 	return v, err
 }
 func (s *server) leaseAction(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +246,7 @@ func (s *server) leaseAction(w http.ResponseWriter, r *http.Request) {
 		}
 	case "entries", "apply-deposit":
 		var amount int64
-		amount, err = parseMoney(r.PostForm.Get("amount"))
+		amount, err = money.Parse(r.PostForm.Get("amount"))
 		if err != nil {
 			break
 		}
@@ -320,7 +321,7 @@ func (s *server) leaseResult(w http.ResponseWriter, r *http.Request, data pageDa
 		data.Error = "auto_rent_void"
 	case errors.Is(err, ledger.ErrDeposit):
 		data.Error = "invalid_deposit_application"
-	case errors.Is(err, lease.ErrInvalid), errors.Is(err, ledger.ErrInvalid), errors.Is(err, person.ErrName), errors.Is(err, errAmount):
+	case errors.Is(err, lease.ErrInvalid), errors.Is(err, ledger.ErrInvalid), errors.Is(err, person.ErrName), errors.Is(err, money.ErrAmount):
 		data.Error = "invalid_lease_entry"
 	default:
 		s.fail(w, err)
