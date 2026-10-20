@@ -14,6 +14,7 @@ import (
 	"github.com/gaw008/wingmanager/internal/auth"
 	"github.com/gaw008/wingmanager/internal/booking"
 	"github.com/gaw008/wingmanager/internal/db"
+	"github.com/gaw008/wingmanager/internal/ical"
 	"github.com/gaw008/wingmanager/internal/person"
 	"github.com/gaw008/wingmanager/internal/property"
 	"github.com/gaw008/wingmanager/internal/settings"
@@ -58,7 +59,8 @@ func newM3App(t *testing.T, locale string) m3App {
 		t.Fatal(err)
 	}
 	// UTC is already Nov 1, while the configured local date is still Oct 31.
-	handler, err := newHandler(database, func() time.Time { return time.Date(2026, 11, 1, 1, 30, 0, 0, time.UTC) })
+	now := func() time.Time { return time.Date(2026, 11, 1, 1, 30, 0, 0, time.UTC) }
+	handler, err := newHandler(database, now, ical.NewService(database, nil, now))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,3 +11,10 @@
 .booking-legend { color: #fff; padding: .15rem .5rem; border-radius: .25rem; }
 .calendar-empty { display: block; text-decoration: none; }
 .booking-bar:focus-visible, .calendar-empty:focus-visible { outline: 3px solid var(--pico-primary); outline-offset: 2px; }
+.feed-url { display: inline-block; max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.calendar-grid .channel-airbnb { background: #a93245; }
+.calendar-grid .channel-vrbo { background: #285d97; }
+.calendar-grid .channel-booking { background: #23417d; }
+.calendar-grid .channel-other { background: #536a35; }
+.calendar-grid .conflict { outline: 3px solid #d12a28; outline-offset: -3px; }
+.booking-bar + .booking-bar { margin-top: .25rem; }

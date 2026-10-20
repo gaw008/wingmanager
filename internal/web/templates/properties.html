@@ -51,12 +51,35 @@
   <form method="post" action="/units/{{.ID}}/{{if .ArchivedAt}}restore{{else}}archive{{end}}{{if $.ShowArchived}}?archived=1{{end}}">
     <button type="submit" class="secondary">{{if .ArchivedAt}}{{t $.Settings.Locale "restore"}}{{else}}{{t $.Settings.Locale "archive"}}{{end}}</button>
   </form>
-  <label for="unit-token-{{.ID}}">{{t $.Settings.Locale "export_token"}}</label>
-  <input id="unit-token-{{.ID}}" value="{{.IcalExportToken}}" readonly>
+  <label for="unit-token-{{.ID}}">{{t $.Settings.Locale "export_url"}}</label>
+  <input id="unit-token-{{.ID}}" value="{{index $.ExportURLs .ID}}" readonly>
+  <button type="button" data-copy-target="unit-token-{{.ID}}" data-copied="{{t $.Settings.Locale "copied"}}" data-copy-error="{{t $.Settings.Locale "copy_error"}}">{{t $.Settings.Locale "copy"}}</button>
   <p>{{t $.Settings.Locale "regenerate_token_hint"}}</p>
   <form method="post" action="/units/{{.ID}}/token{{if $.ShowArchived}}?archived=1{{end}}">
     <button type="submit" class="outline">{{t $.Settings.Locale "regenerate_token"}}</button>
   </form>
+  <h4>{{t $.Settings.Locale "feeds"}}</h4>
+  {{range index $.Feeds .ID}}
+  <section data-feed-id="{{.ID}}">
+    <p>{{t $.Settings.Locale .Channel}} · <span class="feed-url" title="{{.Url}}">{{.Url}}</span></p>
+    <p>{{t $.Settings.Locale "last_success"}}: {{if .LastSuccessAt.Valid}}<time>{{.LastSuccessAt.String}}</time>{{else}}{{t $.Settings.Locale "never_synced"}}{{end}}</p>
+    {{if .LastError.Valid}}<p role="alert">{{t $.Settings.Locale "sync_error"}}: {{syncError $.Settings.Locale .LastError.String}}</p>{{end}}
+    <form method="post" action="/feeds/{{.ID}}/sync"><button type="submit">{{t $.Settings.Locale "sync_now"}}</button></form>
+    <details><summary>{{t $.Settings.Locale "edit"}}</summary>
+      <form method="post" action="/feeds/{{.ID}}/edit">
+      <label>{{t $.Settings.Locale "channel"}}<select name="channel">{{$channel := .Channel}}{{range $.FeedChannels}}<option value="{{.}}" {{if eq . $channel}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>
+      <label>{{t $.Settings.Locale "feed_url"}}<input type="url" name="url" value="{{.Url}}" required></label>
+      <button type="submit">{{t $.Settings.Locale "save"}}</button></form>
+    </details>
+    <form method="post" action="/feeds/{{.ID}}/remove" data-confirm="{{t $.Settings.Locale "remove_feed_hint"}}"><button type="submit" class="secondary">{{t $.Settings.Locale "remove_feed"}}</button></form>
+  </section>
+  {{else}}<p>{{t $.Settings.Locale "no_feeds"}}</p>{{end}}
+  <details><summary>{{t $.Settings.Locale "add_feed"}}</summary>
+  <form method="post" action="/units/{{.ID}}/feeds">
+    <label>{{t $.Settings.Locale "channel"}}<select name="channel">{{range $.FeedChannels}}<option value="{{.}}">{{t $.Settings.Locale .}}</option>{{end}}</select></label>
+    <label>{{t $.Settings.Locale "feed_url"}}<input type="url" name="url" required></label>
+    <button type="submit">{{t $.Settings.Locale "add_feed"}}</button>
+  </form></details>
 </article>
 {{else}}<p>{{t .Settings.Locale "no_units"}}</p>{{end}}
 <h3>{{t .Settings.Locale "add_unit"}}</h3>

@@ -9,10 +9,12 @@ import (
 
 	"github.com/gaw008/wingmanager/internal/booking"
 	"github.com/gaw008/wingmanager/internal/civildate"
+	"github.com/gaw008/wingmanager/internal/ical"
 	"github.com/gaw008/wingmanager/internal/occupancy"
 	"github.com/gaw008/wingmanager/internal/person"
 	"github.com/gaw008/wingmanager/internal/property"
 	"github.com/gaw008/wingmanager/internal/settings"
+	"github.com/gaw008/wingmanager/internal/task"
 )
 
 type unitChoice struct {
@@ -22,6 +24,7 @@ type unitChoice struct {
 type bookingRow struct {
 	booking.Booking
 	UnitLabel, GuestName string
+	Conflict             bool
 }
 type calendarDay struct {
 	Date   string
@@ -30,8 +33,9 @@ type calendarDay struct {
 }
 type calendarCell struct {
 	calendarDay
-	Span    int
-	Booking *bookingRow
+	Span     int
+	Bookings []bookingRow
+	Conflict bool
 }
 type calendarUnit struct {
 	ID    int64
@@ -46,6 +50,8 @@ type calendarProperty struct {
 // bookingPage holds the booking forms and the calendar derived from existing records.
 type bookingPage struct {
 	Booking                         booking.Booking
+	Cleaning                        *task.Task
+	SourceURL                       string
 	NewGuest                        person.Details
 	BookingRows, Conflicts          []bookingRow
 	UnitChoices                     []unitChoice
@@ -99,7 +105,7 @@ func bookingRows(values []booking.Booking, data pageData) []bookingRow {
 	}
 	rows := make([]bookingRow, len(values))
 	for i, b := range values {
-		rows[i] = bookingRow{b, units[b.UnitID], people[b.GuestID]}
+		rows[i] = bookingRow{Booking: b, UnitLabel: units[b.UnitID], GuestName: people[b.GuestID]}
 	}
 	return rows
 }
@@ -154,6 +160,19 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Page = "edit_booking"
+		data.Cleaning, err = task.CleaningForBooking(r.Context(), s.database, id)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		if data.Booking.Imported {
+			feed, err := ical.Get(r.Context(), s.database, data.Booking.FeedID)
+			if err != nil {
+				s.fail(w, err)
+				return
+			}
+			data.SourceURL = feed.Url
+		}
 	} else {
 		data.Booking.Kind, data.Booking.Channel, data.Booking.Status = booking.KindStay, booking.ChannelDirect, booking.StatusConfirmed
 	}
@@ -189,13 +208,16 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b := &data.Booking
-	b.Kind, b.Channel, b.CheckIn, b.CheckOut, b.Notes = r.PostForm.Get("kind"), r.PostForm.Get("channel"), r.PostForm.Get("check_in"), r.PostForm.Get("check_out"), r.PostForm.Get("notes")
-	unit, err := strconv.ParseInt(r.PostForm.Get("unit_id"), 10, 64)
-	if err != nil || unit <= 0 {
-		s.bookingResult(w, r, data, booking.ErrInvalid)
-		return
+	b.Notes = r.PostForm.Get("notes")
+	if !b.Imported {
+		b.Kind, b.Channel, b.CheckIn, b.CheckOut = r.PostForm.Get("kind"), r.PostForm.Get("channel"), r.PostForm.Get("check_in"), r.PostForm.Get("check_out")
+		unit, err := strconv.ParseInt(r.PostForm.Get("unit_id"), 10, 64)
+		if err != nil || unit <= 0 {
+			s.bookingResult(w, r, data, booking.ErrInvalid)
+			return
+		}
+		b.UnitID = unit
 	}
-	b.UnitID = unit
 	b.GuestID = 0
 	if raw := r.PostForm.Get("guest_id"); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 64)
@@ -210,8 +232,11 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 	if data.NewGuest.Name != "" || data.NewGuest.Email != "" || data.NewGuest.Phone != "" {
 		details.NewGuest = &data.NewGuest
 	}
+	var err error
 	if b.ID == 0 {
 		b.ID, err = booking.Create(r.Context(), s.database, details)
+	} else if b.Imported {
+		err = booking.UpdateImported(r.Context(), s.database, b.ID, booking.OwnerDetails{GuestID: details.GuestID, NewGuest: details.NewGuest, Notes: details.Notes})
 	} else {
 		err = booking.Update(r.Context(), s.database, b.ID, details)
 	}
@@ -336,6 +361,17 @@ func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
 			byUnit[row.UnitID] = append(byUnit[row.UnitID], occupied{row, interval})
 		}
 	}
+	for unitID, items := range byUnit {
+		for i := range items {
+			for j := i + 1; j < len(items); j++ {
+				if items[i].interval.Overlaps(items[j].interval) {
+					items[i].row.Conflict = true
+					items[j].row.Conflict = true
+				}
+			}
+		}
+		byUnit[unitID] = items
+	}
 	properties, err := property.List(r.Context(), s.database, false)
 	if err != nil {
 		s.fail(w, err)
@@ -359,23 +395,39 @@ func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
 				}
 				cell := calendarCell{calendarDay: data.Days[i], Span: 1}
 				for _, b := range byUnit[u.ID] {
-					if !b.interval.Overlaps(dayRange) {
-						continue
+					if b.interval.Overlaps(dayRange) {
+						cell.Bookings = append(cell.Bookings, b.row)
 					}
-					cell.Booking = &b.row
-					for i+cell.Span < len(data.Days) {
-						next := day.AddDays(cell.Span)
-						nextRange, err := occupancy.Stay(next, next.AddDays(1))
-						if err != nil {
-							s.fail(w, err)
-							return
-						}
-						if !b.interval.Overlaps(nextRange) {
-							break
-						}
-						cell.Span++
+				}
+				cell.Conflict = len(cell.Bookings) > 1
+				// Merge only adjacent days with the same occupants, so overlapping imports
+				// all remain visible and a conflict never hides the second booking.
+				for len(cell.Bookings) > 0 && i+cell.Span < len(data.Days) {
+					next := day.AddDays(cell.Span)
+					nextRange, err := occupancy.Stay(next, next.AddDays(1))
+					if err != nil {
+						s.fail(w, err)
+						return
 					}
-					break
+					var nextBookings []bookingRow
+					for _, b := range byUnit[u.ID] {
+						if b.interval.Overlaps(nextRange) {
+							nextBookings = append(nextBookings, b.row)
+						}
+					}
+					same := len(nextBookings) == len(cell.Bookings)
+					if same {
+						for j := range nextBookings {
+							if nextBookings[j].ID != cell.Bookings[j].ID {
+								same = false
+								break
+							}
+						}
+					}
+					if !same {
+						break
+					}
+					cell.Span++
 				}
 				row.Cells = append(row.Cells, cell)
 				i += cell.Span

@@ -6,7 +6,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gaw008/wingmanager/internal/ical"
 	"github.com/gaw008/wingmanager/internal/person"
 	"github.com/gaw008/wingmanager/internal/property"
 	"github.com/gaw008/wingmanager/internal/settings"
@@ -164,7 +166,7 @@ func TestM2HTTPHappyPathsBothLanguages(t *testing.T) {
 				t.Fatal("search ignored")
 			}
 			// Database-backed state remains available after constructing a fresh handler.
-			rebuilt, err := web.New(a.database)
+			rebuilt, err := web.New(a.database, ical.NewService(a.database, nil, time.Now))
 			if err != nil {
 				t.Fatal(err)
 			}

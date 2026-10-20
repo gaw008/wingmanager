@@ -6,17 +6,25 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/gaw008/wingmanager/internal/db"
+	"github.com/gaw008/wingmanager/internal/ical"
+	"github.com/gaw008/wingmanager/internal/jobs"
 	"github.com/gaw008/wingmanager/internal/web"
 )
 
 // readHeaderTimeout bounds how long a slow client can occupy a connection before sending headers.
 const readHeaderTimeout = 5 * time.Second
+
+// shutdownTimeout allows cancelled requests to record their final sync status.
+const shutdownTimeout = 10 * time.Second
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -51,11 +59,34 @@ func run(args []string) error {
 	if err := db.Migrate(context.Background(), database); err != nil {
 		return err
 	}
-	handler, err := web.New(database)
+	service := ical.NewService(database, nil, time.Now)
+	handler, err := web.New(database, service)
 	if err != nil {
 		return err
 	}
 	log.Printf("wingmanager listening on http://%s", *addr)
-	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: readHeaderTimeout}
-	return server.ListenAndServe()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	server := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: readHeaderTimeout, BaseContext: func(net.Listener) context.Context { return ctx }}
+	jobsDone := make(chan struct{})
+	go func() { defer close(jobsDone); jobs.Run(ctx, database, service) }()
+	serverDone := make(chan error, 1)
+	go func() { serverDone <- server.ListenAndServe() }()
+	select {
+	case err := <-serverDone:
+		stop()
+		<-jobsDone
+		return err
+	case <-ctx.Done():
+		// Request and job contexts are already cancelled; drain handlers before DB close.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		err := server.Shutdown(shutdownCtx)
+		<-jobsDone
+		serveErr := <-serverDone
+		if errors.Is(serveErr, http.ErrServerClosed) {
+			serveErr = nil
+		}
+		return errors.Join(err, serveErr)
+	}
 }

@@ -42,6 +42,15 @@ func (q *Queries) createBooking(ctx context.Context, arg createBookingParams) (i
 	return id, err
 }
 
+const detachFeed = `-- name: detachFeed :exec
+UPDATE bookings SET feed_id = NULL, external_uid = NULL, updated_at = datetime('now') WHERE feed_id = ?
+`
+
+func (q *Queries) detachFeed(ctx context.Context, feedID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, detachFeed, feedID)
+	return err
+}
+
 const getBooking = `-- name: getBooking :one
 SELECT id, unit_id, kind, status, check_in, check_out, channel, guest_id, feed_id, external_uid, notes, created_at, updated_at FROM bookings WHERE id = ?
 `
@@ -73,6 +82,47 @@ SELECT id, unit_id, kind, status, check_in, check_out, channel, guest_id, feed_i
 
 func (q *Queries) listBookings(ctx context.Context) ([]bookingRecord, error) {
 	rows, err := q.db.QueryContext(ctx, listBookings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []bookingRecord
+	for rows.Next() {
+		var i bookingRecord
+		if err := rows.Scan(
+			&i.ID,
+			&i.UnitID,
+			&i.Kind,
+			&i.Status,
+			&i.CheckIn,
+			&i.CheckOut,
+			&i.Channel,
+			&i.GuestID,
+			&i.FeedID,
+			&i.ExternalUid,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFeedBookings = `-- name: listFeedBookings :many
+SELECT id, unit_id, kind, status, check_in, check_out, channel, guest_id, feed_id, external_uid, notes, created_at, updated_at FROM bookings WHERE feed_id = ? ORDER BY id
+`
+
+func (q *Queries) listFeedBookings(ctx context.Context, feedID sql.NullInt64) ([]bookingRecord, error) {
+	rows, err := q.db.QueryContext(ctx, listFeedBookings, feedID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,4 +258,56 @@ func (q *Queries) updateBooking(ctx context.Context, arg updateBookingParams) er
 		arg.ID,
 	)
 	return err
+}
+
+const updateImportedOwnerFields = `-- name: updateImportedOwnerFields :exec
+UPDATE bookings SET guest_id = ?, notes = ?, updated_at = datetime('now') WHERE id = ?
+`
+
+type updateImportedOwnerFieldsParams struct {
+	GuestID sql.NullInt64
+	Notes   string
+	ID      int64
+}
+
+func (q *Queries) updateImportedOwnerFields(ctx context.Context, arg updateImportedOwnerFieldsParams) error {
+	_, err := q.db.ExecContext(ctx, updateImportedOwnerFields, arg.GuestID, arg.Notes, arg.ID)
+	return err
+}
+
+const upsertImported = `-- name: upsertImported :one
+INSERT INTO bookings (unit_id, kind, status, check_in, check_out, channel, feed_id, external_uid)
+VALUES (?, ?, 'confirmed', ?, ?, ?, ?, ?)
+ON CONFLICT (feed_id, external_uid) DO UPDATE SET
+kind = excluded.kind, status = excluded.status, check_in = excluded.check_in,
+check_out = excluded.check_out, channel = excluded.channel, updated_at = datetime('now')
+WHERE bookings.kind != excluded.kind OR bookings.status != excluded.status
+ OR bookings.check_in != excluded.check_in OR bookings.check_out != excluded.check_out
+ OR bookings.channel != excluded.channel
+RETURNING id
+`
+
+type upsertImportedParams struct {
+	UnitID      int64
+	Kind        string
+	CheckIn     string
+	CheckOut    string
+	Channel     string
+	FeedID      sql.NullInt64
+	ExternalUid sql.NullString
+}
+
+func (q *Queries) upsertImported(ctx context.Context, arg upsertImportedParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, upsertImported,
+		arg.UnitID,
+		arg.Kind,
+		arg.CheckIn,
+		arg.CheckOut,
+		arg.Channel,
+		arg.FeedID,
+		arg.ExternalUid,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }

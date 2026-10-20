@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Booking.com//Calendar Export//EN
+BEGIN:VEVENT
+UID:booking-confirmed-long-
+ identifier@booking.example
+DTSTAMP:20261001T120000Z
+DTSTART;VALUE=DATE:20261112
+DTEND;VALUE=DATE:20261114
+SUMMARY:CLOSED - Not available (Booking.com does not distinguish
+  reservations from blocks)
+DESCRIPTION:Synthetic occupancy data with a deliberately long
+  folded description. No personal data.
+END:VEVENT
+END:VCALENDAR

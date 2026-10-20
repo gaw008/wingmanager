@@ -1,4 +1,4 @@
-// Package booking owns manual bookings and their occupancy checks.
+// Package booking owns bookings, imported snapshots, and their occupancy checks.
 package booking
 
 import (
@@ -11,6 +11,7 @@ import (
 	"github.com/gaw008/wingmanager/internal/civildate"
 	"github.com/gaw008/wingmanager/internal/occupancy"
 	"github.com/gaw008/wingmanager/internal/person"
+	"github.com/gaw008/wingmanager/internal/task"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
@@ -29,6 +30,8 @@ type Booking struct {
 	Kind, Status, Channel       string
 	CheckIn, CheckOut           string
 	Notes, CreatedAt, UpdatedAt string
+	FeedID                      int64
+	ExternalUID                 string
 	Imported                    bool
 }
 
@@ -94,6 +97,9 @@ func Create(ctx context.Context, database *sql.DB, value Details) (int64, error)
 	if err != nil {
 		return 0, writeError(err)
 	}
+	if err := maintainCleaning(ctx, tx, id); err != nil {
+		return 0, err
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -141,6 +147,9 @@ func Update(ctx context.Context, database *sql.DB, id int64, value Details) erro
 	}); err != nil {
 		return writeError(err)
 	}
+	if err := maintainCleaning(ctx, tx, id); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -177,6 +186,9 @@ func SetCancelled(ctx context.Context, database *sql.DB, id int64, cancelled boo
 		}
 	}
 	if err := queries.setBookingStatus(ctx, setBookingStatusParams{ID: id, Status: status}); err != nil {
+		return err
+	}
+	if err := maintainCleaning(ctx, tx, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -227,6 +239,7 @@ func fromRecord(value bookingRecord) Booking {
 		Kind: value.Kind, Status: value.Status, Channel: value.Channel,
 		CheckIn: value.CheckIn, CheckOut: value.CheckOut, Notes: value.Notes,
 		CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, Imported: value.FeedID.Valid,
+		FeedID: value.FeedID.Int64, ExternalUID: value.ExternalUid.String,
 	}
 }
 
@@ -321,4 +334,16 @@ func writeError(err error) error {
 		return fmt.Errorf("%w: unit or guest does not exist", ErrInvalid)
 	}
 	return err
+}
+
+// maintainCleaning shares lifecycle rules between manual writes and snapshots.
+func maintainCleaning(ctx context.Context, tx *sql.Tx, id int64) error {
+	value, err := New(tx).getBooking(ctx, id)
+	if err != nil {
+		return err
+	}
+	if value.Kind == KindStay {
+		return task.EnsureCleaning(ctx, tx, id, value.Status == StatusConfirmed)
+	}
+	return task.CancelCleaning(ctx, tx, id)
 }

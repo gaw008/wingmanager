@@ -69,6 +69,10 @@ func (s *server) renderPropertyDetail(w http.ResponseWriter, r *http.Request, id
 		s.fail(w, err)
 		return
 	}
+	if err := s.propertyFeeds(r, &data); err != nil {
+		s.fail(w, err)
+		return
+	}
 	s.renderDomainResult(w, r, data, actionErr)
 }
 

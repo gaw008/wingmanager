@@ -42,3 +42,19 @@ sql:
         omit_unused_structs: true
         rename:
           booking: bookingRecord
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/task/queries.sql
+    gen:
+      go:
+        package: task
+        out: internal/task
+        omit_unused_structs: true
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/ical/queries.sql
+    gen:
+      go:
+        package: ical
+        out: internal/ical
+        omit_unused_structs: true
