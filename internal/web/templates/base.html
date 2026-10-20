@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{t .Settings.Locale .Page}} · wingmanager</title>
   <link rel="stylesheet" href="/static/pico-2.0.6.min.css">
+  <link rel="stylesheet" href="/static/calendar.css">
   <script src="/static/htmx-2.0.4.min.js" defer></script>
 </head>
 <body>
@@ -15,6 +16,8 @@
         <li><a href="/">{{t .Settings.Locale "today"}}</a></li>
         <li><a href="/properties">{{t .Settings.Locale "properties"}}</a></li>
         <li><a href="/people">{{t .Settings.Locale "people"}}</a></li>
+        <li><a href="/calendar">{{t .Settings.Locale "calendar"}}</a></li>
+        <li><a href="/bookings">{{t .Settings.Locale "bookings"}}</a></li>
         <li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
         <li><form method="post" action="/logout"><button type="submit" class="outline">{{t .Settings.Locale "logout"}}</button></form></li>
       </ul>{{end}}
@@ -31,6 +34,9 @@
     {{if or (eq .Page "new_property") (eq .Page "edit_property")}}{{template "property_form" .}}{{end}}
     {{if eq .Page "people"}}{{template "people" .}}{{end}}
     {{if or (eq .Page "new_person") (eq .Page "edit_person")}}{{template "person_form" .}}{{end}}
+    {{if eq .Page "calendar"}}{{template "calendar" .}}{{end}}
+    {{if eq .Page "bookings"}}{{template "bookings" .}}{{end}}
+    {{if or (eq .Page "new_booking") (eq .Page "edit_booking")}}{{template "booking_form" .}}{{end}}
   </main>
 </body>
 </html>{{end}}

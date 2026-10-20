@@ -1,0 +1,73 @@
+{{define "booking_conflicts"}}
+{{if .Conflicts}}<ul class="booking-conflicts">
+{{range .Conflicts}}<li><a href="/bookings/{{.ID}}">#{{.ID}} · {{.UnitLabel}} · {{t $.Settings.Locale .Kind}} · {{.CheckIn}} → {{.CheckOut}}{{if .GuestName}} · {{.GuestName}}{{end}}</a></li>{{end}}
+</ul>{{end}}
+{{end}}
+
+{{define "bookings"}}
+<p><a href="/bookings/new">{{t .Settings.Locale "new_booking"}}</a> · <a href="/calendar">{{t .Settings.Locale "calendar"}}</a></p>
+<form method="get" action="/bookings">
+<div class="grid">
+<label>{{t .Settings.Locale "unit_name"}}<select name="unit"><option value="">{{t .Settings.Locale "all_units"}}</option>{{range .UnitChoices}}<option value="{{.ID}}" {{if eq $.UnitFilter .ID}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+<label>{{t .Settings.Locale "booking_period"}}<select name="period"><option value="">{{t .Settings.Locale "all_dates"}}</option><option value="upcoming" {{if eq .PeriodFilter "upcoming"}}selected{{end}}>{{t .Settings.Locale "upcoming"}}</option><option value="past" {{if eq .PeriodFilter "past"}}selected{{end}}>{{t .Settings.Locale "past"}}</option></select></label>
+<label>{{t .Settings.Locale "booking_status"}}<select name="status"><option value="">{{t .Settings.Locale "all_statuses"}}</option>{{range .Statuses}}<option value="{{.}}" {{if eq $.StatusFilter .}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>
+</div><button type="submit">{{t .Settings.Locale "apply"}}</button>
+</form>
+{{template "booking_conflicts" .}}
+<div class="overflow-auto"><table>
+<thead><tr><th>{{t .Settings.Locale "booking_label"}}</th><th>{{t .Settings.Locale "unit_name"}}</th><th>{{t .Settings.Locale "check_in"}}</th><th>{{t .Settings.Locale "check_out"}}</th><th>{{t .Settings.Locale "guest"}}</th><th>{{t .Settings.Locale "channel"}}</th><th>{{t .Settings.Locale "booking_status"}}</th></tr></thead>
+<tbody>{{range .BookingRows}}<tr data-booking-id="{{.ID}}"><td><a href="/bookings/{{.ID}}">#{{.ID}} · {{t $.Settings.Locale .Kind}}</a></td><td>{{.UnitLabel}}</td><td>{{.CheckIn}}</td><td>{{.CheckOut}}</td><td>{{.GuestName}}</td><td>{{t $.Settings.Locale .Channel}}</td><td>{{t $.Settings.Locale .Status}}</td></tr>{{else}}<tr><td colspan="7">{{t .Settings.Locale "no_bookings"}}</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}
+
+{{define "booking_form"}}
+<p><a href="/calendar">{{t .Settings.Locale "calendar"}}</a> · <a href="/bookings">{{t .Settings.Locale "bookings"}}</a></p>
+{{template "booking_conflicts" .}}
+{{if .Booking.ID}}<p>#{{.Booking.ID}} · {{t .Settings.Locale .Booking.Status}}</p>{{end}}
+<form method="post" {{if .Booking.ID}}action="/bookings/{{.Booking.ID}}/edit"{{else}}action="/bookings/new"{{end}}>
+<label for="unit_id">{{t .Settings.Locale "unit_name"}}</label>
+<select id="unit_id" name="unit_id" required><option value="">{{t .Settings.Locale "select_unit"}}</option>{{range .UnitChoices}}<option value="{{.ID}}" {{if eq $.Booking.UnitID .ID}}selected{{end}}>{{.Label}}</option>{{end}}</select>
+<div class="grid">
+<label for="kind">{{t .Settings.Locale "booking_kind"}}<select id="kind" name="kind">{{range .Kinds}}<option value="{{.}}" {{if eq $.Booking.Kind .}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>
+<label for="channel">{{t .Settings.Locale "channel"}}<select id="channel" name="channel">{{range .Channels}}<option value="{{.}}" {{if eq $.Booking.Channel .}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>
+</div>
+<div class="grid">
+<label for="check_in">{{t .Settings.Locale "check_in"}}<input type="date" id="check_in" name="check_in" value="{{.Booking.CheckIn}}" required></label>
+<label for="check_out">{{t .Settings.Locale "check_out"}}<input type="date" id="check_out" name="check_out" value="{{.Booking.CheckOut}}" required></label>
+</div>
+<p>{{t .Settings.Locale "checkout_hint"}}</p>
+<fieldset>
+<legend>{{t .Settings.Locale "guest"}}</legend>
+<p>{{t .Settings.Locale "guest_hint"}}</p>
+<label for="guest_id">{{t .Settings.Locale "existing_guest"}}</label>
+<select id="guest_id" name="guest_id"><option value="">{{t .Settings.Locale "no_guest"}}</option>{{range .People}}<option value="{{.ID}}" {{if eq $.Booking.GuestID .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
+<details {{if .NewGuest.Name}}open{{end}}><summary>{{t .Settings.Locale "inline_guest"}}</summary>
+<label for="guest_name">{{t .Settings.Locale "name"}}</label><input id="guest_name" name="guest_name" value="{{.NewGuest.Name}}">
+<label for="guest_email">{{t .Settings.Locale "email"}}</label><input type="email" id="guest_email" name="guest_email" value="{{.NewGuest.Email}}">
+<label for="guest_phone">{{t .Settings.Locale "phone"}}</label><input id="guest_phone" name="guest_phone" value="{{.NewGuest.Phone}}">
+</details>
+</fieldset>
+<label for="notes">{{t .Settings.Locale "notes"}}</label><textarea id="notes" name="notes">{{.Booking.Notes}}</textarea>
+<button type="submit">{{t .Settings.Locale "save"}}</button>
+</form>
+{{if .Booking.ID}}<form method="post" action="/bookings/{{.Booking.ID}}/{{if eq .Booking.Status "cancelled"}}restore{{else}}cancel{{end}}"><button type="submit" class="secondary">{{if eq .Booking.Status "cancelled"}}{{t .Settings.Locale "restore_booking"}}{{else}}{{t .Settings.Locale "cancel_booking"}}{{end}}</button></form>{{end}}
+{{end}}
+
+{{define "calendar"}}
+<nav aria-label="{{t .Settings.Locale "calendar_month"}}"><ul>
+{{if .PreviousMonth}}<li><a rel="prev" href="/calendar?month={{.PreviousMonth}}">{{t .Settings.Locale "previous_month"}}</a></li>{{end}}
+<li><strong data-month="{{.Month}}">{{.Month}}</strong></li>
+{{if .NextMonth}}<li><a rel="next" href="/calendar?month={{.NextMonth}}">{{t .Settings.Locale "next_month"}}</a></li>{{end}}
+</ul><ul><li><a href="/calendar">{{t .Settings.Locale "today"}}</a></li><li><a href="/bookings/new">{{t .Settings.Locale "new_booking"}}</a></li></ul></nav>
+<p><span class="booking-legend stay">{{t .Settings.Locale "stay"}}</span> · <span class="booking-legend block">{{t .Settings.Locale "block"}}</span> · {{t .Settings.Locale "calendar_hint"}}</p>
+<div class="overflow-auto"><table class="calendar-grid">
+<caption>{{.Month}} · {{t .Settings.Locale "calendar"}}</caption>
+<thead><tr><th scope="col">{{t .Settings.Locale "unit_name"}}</th>{{range .Days}}<th scope="col" data-date="{{.Date}}" {{if .Today}}class="calendar-today" aria-current="date"{{end}}>{{.Number}}</th>{{end}}</tr></thead>
+{{range .CalendarProperties}}<tbody>
+<tr class="calendar-property"><th scope="rowgroup" colspan="{{len $.Days | calendarColumns}}">{{.Name}}</th></tr>
+{{range .Units}}<tr data-unit-id="{{.ID}}"><th scope="row">{{.Name}}</th>{{$unit := .ID}}{{range .Cells}}
+{{if .Booking}}<td colspan="{{.Span}}" class="occupied {{.Booking.Kind}}"><a class="booking-bar" href="/bookings/{{.Booking.ID}}" title="{{.Booking.CheckIn}} → {{.Booking.CheckOut}}">#{{.Booking.ID}} · {{t $.Settings.Locale .Booking.Kind}}{{if .Booking.GuestName}} · {{.Booking.GuestName}}{{end}}</a></td>
+{{else}}<td {{if .Today}}class="calendar-today"{{end}}><a class="calendar-empty" href="/bookings/new?unit={{$unit}}&amp;date={{.Date}}" aria-label="{{t $.Settings.Locale "new_booking"}} · {{.Date}}">+</a></td>{{end}}
+{{end}}</tr>{{end}}</tbody>{{else}}<tbody><tr><td>{{t .Settings.Locale "no_units"}}</td></tr></tbody>{{end}}
+</table></div>
+{{end}}

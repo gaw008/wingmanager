@@ -32,3 +32,13 @@ sql:
         package: person
         out: internal/person
         omit_unused_structs: true
+  - engine: sqlite
+    schema: internal/db/migrations
+    queries: internal/booking/queries.sql
+    gen:
+      go:
+        package: booking
+        out: internal/booking
+        omit_unused_structs: true
+        rename:
+          booking: bookingRecord

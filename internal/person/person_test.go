@@ -81,3 +81,39 @@ func TestValidationEditAndSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCreateInTxLeavesCommitAndRollbackToCaller(t *testing.T) {
+	for _, commit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "rollback", true: "commit"}[commit], func(t *testing.T) {
+			database := testDB(t)
+			tx, err := database.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			if _, err := person.CreateInTx(t.Context(), tx, person.Details{Name: " \t "}); !errors.Is(err, person.ErrName) {
+				t.Fatalf("invalid transaction contact: %v", err)
+			}
+			id, err := person.CreateInTx(t.Context(), tx, person.Details{Name: " Guest ", Email: "guest@example.test"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if commit {
+				err = tx.Commit()
+			} else {
+				err = tx.Rollback()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := person.Get(t.Context(), database, id)
+			if commit {
+				if err != nil || value.Name != "Guest" || value.Email != "guest@example.test" {
+					t.Fatalf("committed contact=%+v err=%v", value, err)
+				}
+			} else if !errors.Is(err, person.ErrNotFound) {
+				t.Fatalf("rolled-back contact=%+v err=%v", value, err)
+			}
+		})
+	}
+}

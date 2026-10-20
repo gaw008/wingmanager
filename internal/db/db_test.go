@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"io/fs"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -37,7 +38,11 @@ func TestMigrateTwice(t *testing.T) {
 	if err := database.QueryRow(`SELECT count(*) FROM settings`).Scan(&rows); err != nil {
 		t.Fatal(err)
 	}
-	if versions != 2 || rows != 1 {
+	files, err := fs.Glob(migrations, "migrations/*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if versions != len(files) || rows != 1 {
 		t.Fatalf("versions=%d settings=%d", versions, rows)
 	}
 	records, err := database.Query(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
@@ -56,7 +61,7 @@ func TestMigrateTwice(t *testing.T) {
 	if err := records.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"people", "properties", "schema_migrations", "sessions", "settings", "units", "users"}; !reflect.DeepEqual(tables, want) {
+	if want := []string{"bookings", "calendar_feeds", "people", "properties", "schema_migrations", "sessions", "settings", "units", "users"}; !reflect.DeepEqual(tables, want) {
 		t.Fatalf("tables=%v want %v", tables, want)
 	}
 }
@@ -66,7 +71,11 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 	if err := Migrate(t.Context(), database); err != nil {
 		t.Fatal(err)
 	}
-	files := fstest.MapFS{"migrations/0003_failure.sql": &fstest.MapFile{Data: []byte(`CREATE TABLE partial (id INTEGER); INSERT INTO partial VALUES (1); INSERT INTO missing VALUES (1);`)}}
+	var before int
+	if err := database.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	files := fstest.MapFS{"migrations/9999_failure.sql": &fstest.MapFile{Data: []byte(`CREATE TABLE partial (id INTEGER); INSERT INTO partial VALUES (1); INSERT INTO missing VALUES (1);`)}}
 	if err := migrate(t.Context(), database, files); err == nil {
 		t.Fatal("expected migration failure")
 	}
@@ -77,11 +86,11 @@ func TestFailedMigrationRollsBack(t *testing.T) {
 	if err := database.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&versions); err != nil {
 		t.Fatal(err)
 	}
-	if partial != 0 || versions != 2 {
+	if partial != 0 || versions != before {
 		t.Fatalf("partial schema=%d versions=%d", partial, versions)
 	}
 	// A corrected migration can apply after rollback without resetting the database.
-	files["migrations/0003_failure.sql"].Data = []byte(`CREATE TABLE complete (id INTEGER);`)
+	files["migrations/9999_failure.sql"].Data = []byte(`CREATE TABLE complete (id INTEGER);`)
 	if err := migrate(t.Context(), database, files); err != nil {
 		t.Fatal(err)
 	}
@@ -159,5 +168,47 @@ func TestM2MigrationPreservesM1Data(t *testing.T) {
 	}
 	if email != "owner@example.com" || hash != "existing hash" || name != "Owner" || locale != "en" {
 		t.Fatal("M2 migration changed M1 data")
+	}
+}
+
+func TestM3MigrationPreservesM2Data(t *testing.T) {
+	database := openTestDB(t)
+	prior := fstest.MapFS{}
+	for _, name := range []string{"migrations/0001_accounts.sql", "migrations/0002_properties_people.sql"} {
+		script, err := migrations.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prior[name] = &fstest.MapFile{Data: script}
+	}
+	if err := migrate(t.Context(), database, prior); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+ INSERT INTO properties (id, name, address, notes) VALUES (1, 'Home', '1 Main St', 'Property notes');
+ INSERT INTO units (id, property_id, name, ical_export_token) VALUES (1, 1, 'Whole home', 'existing-export-token');
+ INSERT INTO people (id, name, email, phone, notes) VALUES (1, 'Guest', 'guest@example.test', '123', 'Contact notes');
+ `); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(t.Context(), database); err != nil {
+		t.Fatal(err)
+	}
+	var propertyName, address, propertyNotes, unitName, token, personName, email, phone, personNotes string
+	if err := database.QueryRow(`SELECT p.name, p.address, p.notes, u.name, u.ical_export_token FROM properties p JOIN units u ON u.property_id = p.id WHERE u.id = 1`).Scan(&propertyName, &address, &propertyNotes, &unitName, &token); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`SELECT name, email, phone, notes FROM people WHERE id = 1`).Scan(&personName, &email, &phone, &personNotes); err != nil {
+		t.Fatal(err)
+	}
+	if propertyName != "Home" || address != "1 Main St" || propertyNotes != "Property notes" || unitName != "Whole home" || token != "existing-export-token" || personName != "Guest" || email != "guest@example.test" || phone != "123" || personNotes != "Contact notes" {
+		t.Fatal("M3 migration changed M2 data")
+	}
+	var feeds, bookings int
+	if err := database.QueryRow(`SELECT (SELECT count(*) FROM calendar_feeds), (SELECT count(*) FROM bookings)`).Scan(&feeds, &bookings); err != nil {
+		t.Fatal(err)
+	}
+	if feeds != 0 || bookings != 0 {
+		t.Fatalf("unexpected M3 records: feeds=%d bookings=%d", feeds, bookings)
 	}
 }

@@ -24,11 +24,20 @@ type Person struct {
 
 // Create saves a contact with a non-empty, trimmed name.
 func Create(ctx context.Context, database *sql.DB, value Details) (int64, error) {
+	return create(ctx, New(database), value)
+}
+
+// CreateInTx saves a contact in the caller's transaction without committing it.
+func CreateInTx(ctx context.Context, tx *sql.Tx, value Details) (int64, error) {
+	return create(ctx, New(tx), value)
+}
+
+func create(ctx context.Context, queries *Queries, value Details) (int64, error) {
 	value.Name = strings.TrimSpace(value.Name)
 	if value.Name == "" {
 		return 0, ErrName
 	}
-	return New(database).createPerson(ctx, createPersonParams(value))
+	return queries.createPerson(ctx, createPersonParams(value))
 }
 
 // Get reads an existing contact.

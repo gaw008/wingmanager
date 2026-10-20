@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gaw008/wingmanager/internal/auth"
 	"github.com/gaw008/wingmanager/internal/person"
@@ -28,6 +29,7 @@ type server struct {
 	auth      *auth.Service
 	database  *sql.DB
 	templates *template.Template
+	now       func() time.Time
 }
 
 type pageData struct {
@@ -45,12 +47,18 @@ type pageData struct {
 	UnitName      string
 	ShowArchived  bool
 	Search        string
+	bookingPage
 }
 
 // New serves setup/login/static publicly and requires a session for every other page.
 // Cross-origin protection wraps all routes, including the unauthenticated forms.
 func New(database *sql.DB) (http.Handler, error) {
+	return newHandler(database, time.Now)
+}
+
+func newHandler(database *sql.DB, now func() time.Time) (http.Handler, error) {
 	templates, err := template.New("pages").Funcs(template.FuncMap{
+		"calendarColumns": func(days int) int { return days + 1 },
 		"t": func(locale, key string) (string, error) {
 			value, ok := catalogs[locale][key]
 			if !ok {
@@ -62,7 +70,7 @@ func New(database *sql.DB) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &server{auth: auth.NewService(database), database: database, templates: templates}
+	s := &server{auth: auth.NewService(database), database: database, templates: templates, now: now}
 	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
@@ -80,6 +88,7 @@ func New(database *sql.DB) (http.Handler, error) {
 	mux.HandleFunc("GET /settings", s.editSettings)
 	mux.HandleFunc("POST /settings", s.editSettings)
 	s.registerPropertyAndPersonRoutes(mux)
+	s.registerBookingRoutes(mux)
 	return http.NewCrossOriginProtection().Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/static/") {
 			mux.ServeHTTP(w, r)
