@@ -65,15 +65,15 @@ func TestM9bPaymentFormsPreviewAndSession(t *testing.T) {
 				}
 				switch amount {
 				case "500.00":
-					if !strings.Contains(rec.Body.String(), "2026-09 · 500.00") || !strings.Contains(rec.Body.String(), "<b>1500.00</b>") {
+					if !strings.Contains(rec.Body.String(), map[string]string{"zh-CN": "2026年9月 · $500.00", "en": "Sep 2026 · $500.00"}[locale]) || !strings.Contains(rec.Body.String(), "<b>$1,500.00</b>") {
 						t.Fatal("incorrect partial payment preview", rec.Body.String())
 					}
 				case "2000.00":
-					if !strings.Contains(rec.Body.String(), "2026-09 · 1000.00") || !strings.Contains(rec.Body.String(), "2026-10 · 1000.00") || !strings.Contains(rec.Body.String(), "<b>0.00</b>") {
+					if !strings.Contains(rec.Body.String(), map[string]string{"zh-CN": "2026年9月 · $1,000.00", "en": "Sep 2026 · $1,000.00"}[locale]) || !strings.Contains(rec.Body.String(), map[string]string{"zh-CN": "2026年10月 · $1,000.00", "en": "Oct 2026 · $1,000.00"}[locale]) || !strings.Contains(rec.Body.String(), "<b>$0.00</b>") {
 						t.Fatal("incorrect exact settlement preview", rec.Body.String())
 					}
 				case "2500.00":
-					if !strings.Contains(rec.Body.String(), "<b>-500.00</b>") || !strings.Contains(rec.Body.String(), "<b>500.00</b>") || !strings.Contains(rec.Body.String(), catalogs[locale]["prepayment"]) {
+					if !strings.Contains(rec.Body.String(), "<b>-$500.00</b>") || !strings.Contains(rec.Body.String(), "<b>$500.00</b>") || !strings.Contains(rec.Body.String(), catalogs[locale]["prepayment"]) {
 						t.Fatal("incorrect prepayment preview", rec.Body.String())
 					}
 				}

@@ -17,7 +17,7 @@ import (
 
 type reservationCard struct {
 	booking.Reservation
-	Status, StatusClass, GuestLabel, Initials, Color, DatesLabel string
+	Status, StatusClass, GuestLabel, Initials, Color string
 }
 type reservationTab struct {
 	Key, Label string
@@ -80,10 +80,17 @@ func (s *server) today(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	dateLabel := local.Format("January 2, Monday")
-	if value.Locale == settings.LocaleChinese {
-		dateLabel = fmt.Sprintf("%d 月 %d 日 星期%s", local.Month(), local.Day(), []string{"日", "一", "二", "三", "四", "五", "六"}[local.Weekday()])
+	dateLabel, err := displayDate(value.Locale, today.Year(), today.String())
+	if err != nil {
+		s.fail(w, err)
+		return
 	}
+	if value.Locale == settings.LocaleChinese {
+		dateLabel += fmt.Sprintf(" 星期%s", []string{"日", "一", "二", "三", "四", "五", "六"}[local.Weekday()])
+	} else {
+		dateLabel += local.Format(", Monday")
+	}
+
 	data.TodayHeading = fmt.Sprintf(catalogs[value.Locale]["today_summary"], dateLabel, data.Reservations.CheckInCount, data.Reservations.CheckOutCount)
 	selected := r.URL.Query().Get("tab")
 	switch selected {
@@ -124,26 +131,6 @@ func (s *server) today(w http.ResponseWriter, r *http.Request) {
 				card.GuestLabel = catalogs[value.Locale]["unnamed_guest"]
 			}
 			card.Initials, card.Color = person.Appearance(card.GuestLabel)
-			from, err := time.Parse(time.DateOnly, stay.CheckIn)
-			if err != nil {
-				s.fail(w, err)
-				return
-			}
-			to, err := time.Parse(time.DateOnly, stay.CheckOut)
-			if err != nil {
-				s.fail(w, err)
-				return
-			}
-			card.DatesLabel = from.Format("Jan 2") + " – " + to.Format("Jan 2")
-			if from.Year() != to.Year() {
-				card.DatesLabel = from.Format("Jan 2, 2006") + " – " + to.Format("Jan 2, 2006")
-			}
-			if value.Locale == settings.LocaleChinese {
-				card.DatesLabel = fmt.Sprintf("%d月%d日 – %d月%d日", from.Month(), from.Day(), to.Month(), to.Day())
-				if from.Year() != to.Year() {
-					card.DatesLabel = fmt.Sprintf("%d年%d月%d日 – %d年%d月%d日", from.Year(), from.Month(), from.Day(), to.Year(), to.Month(), to.Day())
-				}
-			}
 			data.ReservationCards = append(data.ReservationCards, card)
 		}
 	}

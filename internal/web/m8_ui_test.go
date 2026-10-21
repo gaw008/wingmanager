@@ -78,7 +78,7 @@ func TestM8OptionalGuestLabelsAndCalendarTitles(t *testing.T) {
 						t.Errorf("calendar title %q must include booking identity, kind and dates", title)
 					}
 				}
-				if !strings.Contains(body, html.EscapeString(guest)+" · 2026-10-31 → 2026-11-01") {
+				if !strings.Contains(body, html.EscapeString(guest)+map[string]string{"zh-CN": " · 10月31日 → 11月1日", "en": " · Oct 31 → Nov 1"}[locale]) {
 					t.Error("calendar title lost the full escaped guest name and dates")
 				}
 			}

@@ -336,8 +336,7 @@ func (s *server) leaseResult(w http.ResponseWriter, r *http.Request, data pageDa
 	status := http.StatusBadRequest
 	switch {
 	case err == nil:
-		s.render(w, r, data, http.StatusOK)
-		return
+		status = http.StatusOK
 	case errors.Is(err, lease.ErrNotFound), errors.Is(err, ledger.ErrNotFound):
 		s.notFound(w, r)
 		return
@@ -355,6 +354,15 @@ func (s *server) leaseResult(w http.ResponseWriter, r *http.Request, data pageDa
 	default:
 		s.fail(w, err)
 		return
+	}
+	if data.Page == "lease_action" && data.EntryKind == ledger.KindPayment {
+		if data.FormValues == nil {
+			data.FormValues = r.PostForm
+		}
+		if err := s.loadPaymentPreview(r, &data, data.FormValues.Get("amount")); err != nil {
+			s.fail(w, err)
+			return
+		}
 	}
 	s.render(w, r, data, status)
 }
@@ -408,7 +416,7 @@ func (s *server) leaseForm(w http.ResponseWriter, r *http.Request) {
 	if data.EntryKind == ledger.KindPayment {
 		data.FormValues = url.Values{"amount": {money.Format(max(data.Balance.BalanceCents, 0))}}
 	}
-	s.render(w, r, data, http.StatusOK)
+	s.leaseResult(w, r, data, nil)
 }
 
 func (s *server) paymentPreview(w http.ResponseWriter, r *http.Request) {
@@ -421,16 +429,24 @@ func (s *server) paymentPreview(w http.ResponseWriter, r *http.Request) {
 		s.leaseResult(w, r, pageData{}, err)
 		return
 	}
-	amount, err := money.Parse(r.URL.Query().Get("amount"))
 	data := pageData{Page: "payment_preview"}
-	if err == nil {
-		data.PaymentPreview, err = ledger.PreviewPayment(r.Context(), s.database, id, amount)
-	}
-	if errors.Is(err, money.ErrAmount) || errors.Is(err, ledger.ErrInvalid) {
-		data.PreviewInvalid = true
-	} else if err != nil {
+	data.Lease.ID = id
+	if err := s.loadPaymentPreview(r, &data, r.URL.Query().Get("amount")); err != nil {
 		s.fail(w, err)
 		return
 	}
 	s.render(w, r, data, http.StatusOK)
+}
+
+// loadPaymentPreview shares parsing and allocation between initial forms and edits.
+func (s *server) loadPaymentPreview(r *http.Request, data *pageData, raw string) error {
+	amount, err := money.Parse(raw)
+	if err == nil {
+		data.PaymentPreview, err = ledger.PreviewPayment(r.Context(), s.database, data.Lease.ID, amount)
+	}
+	if errors.Is(err, money.ErrAmount) || errors.Is(err, ledger.ErrInvalid) {
+		data.PreviewInvalid = true
+		return nil
+	}
+	return err
 }

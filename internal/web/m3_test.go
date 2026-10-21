@@ -120,7 +120,7 @@ func TestM3HTTPCellTurnoverConflictAndLifecycle(t *testing.T) {
 			// Same-day turnover succeeds through the exact form used by the UI.
 			secondForm := a.form("2026-10-12", "2026-10-14")
 			a.request(t, "POST", "/bookings/new", secondForm, 303)
-			a.request(t, "POST", "/bookings/new", a.form("2026-10-11", "2026-10-13"), 409, catalogs[locale]["booking_conflict"], firstPath, "2026-10-10", "2026-10-12")
+			a.request(t, "POST", "/bookings/new", a.form("2026-10-11", "2026-10-13"), 409, catalogs[locale]["booking_conflict"], firstPath, map[string]string{"zh-CN": "10月10日", "en": "Oct 10"}[locale], map[string]string{"zh-CN": "10月12日", "en": "Oct 12"}[locale])
 			a.request(t, "POST", firstPath+"/edit", form, 303)
 			a.request(t, "POST", firstPath+"/cancel", nil, 303)
 			body := a.request(t, "GET", "/calendar?month=2026-10", nil, 200)

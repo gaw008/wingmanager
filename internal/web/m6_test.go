@@ -39,7 +39,7 @@ func TestM6HTTPMoneyReportCSVAndVoid(t *testing.T) {
 					t.Fatalf("filter failed: %s", path)
 				}
 			}
-			a.request(t, "GET", "/money?tab=reports&year=2026&property="+propertyID, nil, 200, `id="report-income">0.00`, `id="report-expense">123.45`, `id="report-net">-123.45`, catalogs[locale]["schedule_e_disclaimer"], "/reports/schedule-e.csv?year=2026&amp;property="+propertyID, "/reports/ledger.csv?year=2026&amp;property="+propertyID)
+			a.request(t, "GET", "/money?tab=reports&year=2026&property="+propertyID, nil, 200, `id="report-income">$0.00`, `id="report-expense">$123.45`, `id="report-net">-$123.45`, catalogs[locale]["schedule_e_disclaimer"], "/reports/schedule-e.csv?year=2026&amp;property="+propertyID, "/reports/ledger.csv?year=2026&amp;property="+propertyID)
 			b, err := booking.Create(t.Context(), a.database, booking.Details{UnitID: a.unitID, Kind: booking.KindStay, Channel: booking.ChannelAirbnb, CheckIn: "2026-01-01", CheckOut: "2026-01-03"})
 			if err != nil {
 				t.Fatal(err)
@@ -48,7 +48,7 @@ func TestM6HTTPMoneyReportCSVAndVoid(t *testing.T) {
 			income := url.Values{"property_id": {propertyID}, "category": {"stay_payout"}, "amount": {"500.75"}, "occurred_on": {"2026-12-31"}, "booking_id": {fmt.Sprint(b)}, "memo": {"Payout"}}
 			a.request(t, "POST", "/money/income", income, 303)
 			a.request(t, "GET", "/money?year=2026&kind=income", nil, 200, "500.75", fmt.Sprintf(`/bookings/%d`, b))
-			a.request(t, "GET", "/money?tab=reports&year=2026", nil, 200, `id="report-income">500.75`, `id="report-expense">123.45`, `id="report-net">377.30`)
+			a.request(t, "GET", "/money?tab=reports&year=2026", nil, 200, `id="report-income">$500.75`, `id="report-expense">$123.45`, `id="report-net">$377.30`)
 			other, err := property.Create(t.Context(), a.database, property.Details{Name: "Another house"}, "Unit")
 			if err != nil {
 				t.Fatal(err)
@@ -92,9 +92,9 @@ func TestM6HTTPMoneyReportCSVAndVoid(t *testing.T) {
 			a.request(t, "POST", "/money/1/void?year=2026&property="+propertyID, url.Values{"reason": {"Wrong repair"}}, 303)
 			a.request(t, "POST", "/money/1/void", url.Values{"reason": {"Second reason"}}, 303)
 			a.request(t, "GET", "/money?year=2026", nil, 200, catalogs[locale]["voided"], "Wrong repair")
-			a.request(t, "GET", "/money?tab=reports&year=2026&property="+propertyID, nil, 200, `id="report-income">1001.50`, `id="report-expense">0.00`, `id="report-net">1001.50`)
+			a.request(t, "GET", "/money?tab=reports&year=2026&property="+propertyID, nil, 200, `id="report-income">$1,001.50`, `id="report-expense">$0.00`, `id="report-net">$1,001.50`)
 			a.request(t, "POST", "/money/2/void", url.Values{"reason": {"Wrong payout"}}, 303)
-			a.request(t, "GET", "/money?tab=reports&year=2026&property="+propertyID, nil, 200, `id="report-income">500.75`)
+			a.request(t, "GET", "/money?tab=reports&year=2026&property="+propertyID, nil, 200, `id="report-income">$500.75`)
 			a.request(t, "POST", "/money/99999/void", url.Values{"reason": {"Missing"}}, 404)
 			for _, path := range []string{"/money?year=0", "/money?year=10000", "/money?year=bad", "/money?property=-1", "/money?kind=bad", "/money?tab=reports&year=-1"} {
 				a.request(t, "GET", path, nil, 400, catalogs[locale]["invalid_money_entry"])

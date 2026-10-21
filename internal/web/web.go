@@ -48,6 +48,7 @@ type Config struct {
 }
 
 type pageData struct {
+	DisplayYear    int
 	Modal          bool
 	FormAction     string
 	FormValues     url.Values
@@ -86,8 +87,10 @@ func New(database *sql.DB, service *ical.Service, config Config) (http.Handler, 
 
 func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, config Config) (http.Handler, error) {
 	templates, err := template.New("pages").Funcs(template.FuncMap{
-		"money":    money.Format,
-		"currency": money.FormatCurrency,
+		"decimal":    money.Format,
+		"date":       displayDate,
+		"rentDueDay": rentDueDay,
+		"currency":   money.FormatCurrency,
 		"syncError": func(locale, message string) string {
 			if message == ical.ErrEmptyFeed.Error() {
 				return catalogs[locale]["empty_feed_warning"]
@@ -268,6 +271,12 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, s
 		s.fail(w, err)
 		return
 	}
+	location, err := time.LoadLocation(value.Timezone)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	data.DisplayYear = s.now().In(location).Year()
 	data.Settings = value
 	data.Locales = settings.Locales()
 	data.SignedIn = data.Page != "setup" && data.Page != "login"

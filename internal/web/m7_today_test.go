@@ -211,7 +211,7 @@ func TestM7TodayAnswersLandlordQuestionsInConfiguredTimezone(t *testing.T) {
 			if len(conflictBars) != 2 {
 				t.Fatalf("expected both sides of one overlap, got %v", conflictBars)
 			}
-			for _, dates := range []string{"2026-11-02 → 2026-11-07", "2026-11-04 → 2026-11-06"} {
+			for _, dates := range map[string][]string{"zh-CN": {"11月2日 → 11月7日", "11月4日 → 11月6日"}, "en": {"Nov 2 → Nov 7", "Nov 4 → Nov 6"}}[locale] {
 				if !strings.Contains(strings.Join(conflictBars, ""), dates) {
 					t.Fatalf("unflagged conflicting stay %s", dates)
 				}

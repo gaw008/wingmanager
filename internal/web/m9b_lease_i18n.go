@@ -4,6 +4,7 @@ import "github.com/gaw008/wingmanager/internal/settings"
 
 func init() {
 	values := map[string][2]string{
+		"rent_due_day":         {"收租日", "Rent due day"},
 		"record_charge":        {"记一笔应收", "Record charge"},
 		"record_credit":        {"给租客减免", "Give tenant credit"},
 		"change_rent":          {"修改月租", "Change monthly rent"},

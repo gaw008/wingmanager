@@ -59,7 +59,7 @@ func TestM9bMoneyModalAndFullPageFallback(t *testing.T) {
 			}
 			query := "year=2026&property=" + fmt.Sprint(unit.PropertyID)
 			a.request(t, http.MethodGet, "/money?"+query, nil, http.StatusOK, `hx-get="/money/1/void?`, `data-entry-id="1"`)
-			a.request(t, http.MethodGet, "/money?tab=reports&"+query, nil, http.StatusOK, `class="stats stats-three"`, `id="report-expense">24.68`, catalogs[locale]["monthly_breakdown"], catalogs[locale]["schedule_e_disclaimer"])
+			a.request(t, http.MethodGet, "/money?tab=reports&"+query, nil, http.StatusOK, `class="stats stats-three"`, `id="report-expense">$24.68`, catalogs[locale]["monthly_breakdown"], catalogs[locale]["schedule_e_disclaimer"])
 		})
 	}
 }
