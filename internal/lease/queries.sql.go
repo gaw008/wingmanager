@@ -63,6 +63,60 @@ func (q *Queries) createLease(ctx context.Context, arg createLeaseParams) (int64
 	return id, err
 }
 
+const currentLeases = `-- name: currentLeases :many
+SELECT l.id, l.unit_id, l.status, l.starts_on, l.ends_on, l.rent_cents, l.due_day, l.deposit_cents, l.notes, p.name AS property_name, u.name AS unit_name,
+       cast(coalesce((SELECT group_concat(name, ', ') FROM
+           (SELECT g.name FROM lease_tenants lt JOIN people g ON g.id = lt.person_id
+            WHERE lt.lease_id = l.id ORDER BY g.name, g.id)), '') AS TEXT) AS tenant_names
+FROM leases l JOIN units u ON u.id = l.unit_id JOIN properties p ON p.id = u.property_id
+WHERE l.status = 'active' AND l.starts_on <= ?1
+  AND (l.ends_on IS NULL OR l.ends_on >= ?1)
+ORDER BY p.name, p.id, u.name, u.id
+`
+
+type currentLeasesRow struct {
+	LeaseRecord  leaseRecord
+	PropertyName string
+	UnitName     string
+	TenantNames  string
+}
+
+func (q *Queries) currentLeases(ctx context.Context, today string) ([]currentLeasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, currentLeases, today)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []currentLeasesRow
+	for rows.Next() {
+		var i currentLeasesRow
+		if err := rows.Scan(
+			&i.LeaseRecord.ID,
+			&i.LeaseRecord.UnitID,
+			&i.LeaseRecord.Status,
+			&i.LeaseRecord.StartsOn,
+			&i.LeaseRecord.EndsOn,
+			&i.LeaseRecord.RentCents,
+			&i.LeaseRecord.DueDay,
+			&i.LeaseRecord.DepositCents,
+			&i.LeaseRecord.Notes,
+			&i.PropertyName,
+			&i.UnitName,
+			&i.TenantNames,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const endLease = `-- name: endLease :exec
 UPDATE leases SET status = 'ended', ends_on = ? WHERE id = ?
 `

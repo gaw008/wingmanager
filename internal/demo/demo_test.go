@@ -105,10 +105,17 @@ func TestSeedPopulatesTodayPageAndRefusesRepeat(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("Today status = %d: %s", response.Code, response.Body.String())
 	}
-	for _, want := range []string{"Demo departing guest", "Demo arriving guest", "Demo overdue tenant", `id="ytd-net">625.00`} {
+	for _, want := range []string{"Demo departing guest", "Demo overdue tenant", `id="ytd-net">$625`} {
 		if !strings.Contains(response.Body.String(), want) {
 			t.Fatalf("Today missing %q: %s", want, response.Body.String())
 		}
+	}
+	request = httptest.NewRequest(http.MethodGet, "/?tab=in", nil)
+	request.AddCookie(&http.Cookie{Name: "wingmanager_session", Value: token})
+	arrivals := httptest.NewRecorder()
+	handler.ServeHTTP(arrivals, request)
+	if arrivals.Code != http.StatusOK || !strings.Contains(arrivals.Body.String(), "Demo arriving guest") || strings.Contains(arrivals.Body.String(), "Demo departing guest") {
+		t.Fatalf("Today arrivals tab: %d %s", arrivals.Code, arrivals.Body)
 	}
 	if _, err := Seed(ctx, database); !errors.Is(err, auth.ErrSetupComplete) {
 		t.Fatalf("repeat seed = %v", err)

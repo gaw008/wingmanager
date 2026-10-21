@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -142,64 +143,86 @@ func TestM7TodayAnswersLandlordQuestionsInConfiguredTimezone(t *testing.T) {
 			must(tx.Commit())
 
 			body := a.request(t, "GET", "/", nil, http.StatusOK,
-				`id="today-date" datetime="2026-10-31"`, "America/Los_Angeles", "Overdue tenant", "750.00", "26 "+catalogs[locale]["days_overdue"],
-				"Overdue repair", "Due today repair", `id="ytd-net">626.55`)
-			section := func(id string) string {
+				`id="today-date" datetime="2026-10-31"`, "America/Los_Angeles", "Overdue tenant", "$750", "26 "+catalogs[locale]["days_overdue"],
+				"Overdue repair", "Due today repair", `id="ytd-net">$626.55`)
+			section := func(page, id string) string {
 				t.Helper()
-				start := strings.Index(body, `<section id="`+id+`">`)
+				start := strings.Index(page, `<section id="`+id+`">`)
 				if start < 0 {
 					t.Fatalf("missing section %s", id)
 				}
-				end := strings.Index(body[start:], "</section>")
-				return body[start : start+end]
+				end := strings.Index(page[start:], "</section>")
+				return page[start : start+end]
 			}
-			checkIns, checkOuts := section("today-check-ins"), section("today-check-outs")
+			checkIns := section(a.request(t, "GET", "/?tab=in", nil, http.StatusOK), "today-reservations")
+			checkOuts := section(body, "today-reservations")
 			if !strings.Contains(checkIns, fmt.Sprintf(`data-booking-id="%d"`, arriving)) || !strings.Contains(checkIns, fmt.Sprintf(`data-booking-id="%d"`, longStay)) || strings.Contains(checkIns, "UTC tomorrow guest") || strings.Contains(checkIns, "Departing guest") {
 				t.Fatal(checkIns)
 			}
 			if !strings.Contains(checkOuts, fmt.Sprintf(`data-booking-id="%d"`, departing)) || strings.Contains(checkOuts, "Arriving guest") {
 				t.Fatal(checkOuts)
 			}
-			for _, hidden := range []string{"Cancelled guest", fmt.Sprintf(`data-booking-id="%d"`, block), "Outside seven days"} {
-				if strings.Contains(body, hidden) {
+			soon := section(a.request(t, "GET", "/?tab=soon", nil, http.StatusOK), "today-reservations")
+			if !strings.Contains(soon, fmt.Sprintf(`data-booking-id="%d"`, next)) || !strings.Contains(soon, "Outside seven days") || strings.Contains(soon, "Long stay guest") {
+				t.Fatal(soon)
+			}
+			for _, hidden := range []string{"Cancelled guest", fmt.Sprintf(`data-booking-id="%d"`, block)} {
+				if strings.Contains(checkIns+checkOuts+soon, hidden) {
 					t.Fatalf("unexpected %q", hidden)
 				}
 			}
-			if !strings.Contains(section("upcoming-check-outs"), fmt.Sprintf(`data-booking-id="%d"`, next)) || strings.Contains(section("upcoming-check-outs"), "Long stay guest") {
-				t.Fatal(section("upcoming-check-outs"))
-			}
+			attention := section(body, "today-attention")
 			for _, id := range dueTaskIDs {
-				if !strings.Contains(section("today-tasks"), fmt.Sprintf(`data-task-id="%d"`, id)) {
+				if !strings.Contains(attention, fmt.Sprintf(`data-task-id="%d"`, id)) {
 					t.Fatal("missing due task")
 				}
 			}
 			cleaning, err := task.CleaningForBooking(ctx, a.database, departing)
 			must(err)
-			if cleaning == nil || !strings.Contains(section("today-tasks"), fmt.Sprintf(`<a href="/tasks/%d">%s</a>`, cleaning.ID, catalogs[locale][task.KindCleaning])) {
+			if cleaning == nil || !strings.Contains(attention, fmt.Sprintf(`<a href="/tasks/%d">%s</a>`, cleaning.ID, catalogs[locale][task.KindCleaning])) {
 				t.Fatal("generated cleaning task is missing its translated title")
 			}
 			for _, hidden := range []string{"Future repair", "Undated repair", "Completed repair", "Cancelled repair"} {
-				if strings.Contains(section("today-tasks"), hidden) {
+				if strings.Contains(attention, hidden) {
 					t.Fatalf("unexpected task %s", hidden)
 				}
 			}
 			for _, id := range []int64{failing, stale, never} {
-				if !strings.Contains(section("today-feeds"), fmt.Sprintf(`data-feed-id="%d"`, id)) {
+				if !strings.Contains(attention, fmt.Sprintf(`data-feed-id="%d"`, id)) {
 					t.Fatal("missing problem feed")
 				}
 			}
 			for _, id := range []int64{healthy, boundary} {
-				if strings.Contains(section("today-feeds"), fmt.Sprintf(`data-feed-id="%d"`, id)) {
+				if strings.Contains(attention, fmt.Sprintf(`data-feed-id="%d"`, id)) {
 					t.Fatal("healthy feed flagged")
 				}
 			}
-			conflicts := section("today-conflicts")
-			if strings.Count(conflicts, `data-conflict=`) != 1 || !strings.Contains(conflicts, "2026-11-04") || strings.Contains(conflicts, "2026-08") {
-				t.Fatal(conflicts)
+			for _, want := range []string{`id="check-in-count">2`, `id="check-out-count">1`, `id="overdue-total">$750`, `1 ` + catalogs[locale]["overdue_count"] + ` · ` + catalogs[locale]["longest"] + ` 26 ` + catalogs[locale]["days"], `data-current-lease-id="` + fmt.Sprint(leaseID) + `"`, `$2,000`, `id="todo-count">10`} {
+				if !strings.Contains(body, want) {
+					t.Fatalf("missing Today summary %s", want)
+				}
 			}
+			// Conflicts remain visible on the calendar, whose view owns conflict navigation.
+			calendar := a.request(t, "GET", "/calendar?month=2026-11", nil, http.StatusOK)
+			if !strings.Contains(calendar, `class="conflict-banner"`) || !strings.Contains(calendar, `<b>1 `) {
+				t.Fatal("upcoming imported conflict banner missing or incorrect")
+			}
+			conflictBars := regexp.MustCompile(`<a class="bar [^"]* conflict [^"]*"[^>]+>`).FindAllString(calendar, -1)
+			if len(conflictBars) != 2 {
+				t.Fatalf("expected both sides of one overlap, got %v", conflictBars)
+			}
+			for _, dates := range []string{"2026-11-02 → 2026-11-07", "2026-11-04 → 2026-11-06"} {
+				if !strings.Contains(strings.Join(conflictBars, ""), dates) {
+					t.Fatalf("unflagged conflicting stay %s", dates)
+				}
+			}
+			if strings.Contains(strings.Join(conflictBars, ""), "2026-08") {
+				t.Fatal("past conflict leaked into future calendar month")
+			}
+
 			report, err := ledger.ReportToDate(ctx, a.database, today)
 			must(err)
-			if report.NetCents != 62655 || !strings.Contains(body, `id="ytd-net">`+money.Format(report.NetCents)) {
+			if report.NetCents != 62655 || !strings.Contains(body, `id="ytd-net">`+money.FormatCurrency("USD", report.NetCents)) {
 				t.Fatalf("YTD: %+v", report)
 			}
 			fullYear, err := ledger.Report(ctx, a.database, 2026, 0)

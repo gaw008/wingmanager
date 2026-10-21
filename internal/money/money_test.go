@@ -30,3 +30,18 @@ func TestFormatIntegerLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatCurrency(t *testing.T) {
+	for _, test := range []struct {
+		currency string
+		cents    int64
+		want     string
+	}{
+		{"USD", 337500, "$3,375"}, {"USD", 337525, "$3,375.25"}, {"EUR", -864001, "-€8,640.01"},
+		{"USD", 0, "$0"}, {"CHF", 100000, "CHF 1,000"}, {"USD", -9223372036854775808, "-$92,233,720,368,547,758.08"},
+	} {
+		if got := money.FormatCurrency(test.currency, test.cents); got != test.want {
+			t.Errorf("FormatCurrency(%s,%d)=%s want %s", test.currency, test.cents, got, test.want)
+		}
+	}
+}

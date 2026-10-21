@@ -177,7 +177,7 @@ func TestPagesRequireSession(t *testing.T) {
 			}
 		}
 	}
-	for _, path := range []string{"/static/htmx-2.0.4.min.js", "/static/pico-2.0.6.min.css", "/login"} {
+	for _, path := range []string{"/static/htmx-2.0.4.min.js", "/static/app.css", "/login"} {
 		response := a.request("GET", path, nil, nil)
 		if response.Code != http.StatusOK || response.Body.Len() == 0 {
 			t.Fatalf("public page %s: %d", path, response.Code)
@@ -225,7 +225,7 @@ func TestSettingsAndEnglishUI(t *testing.T) {
 	a.setup(t)
 	cookie := a.login(t)
 	response := a.request("GET", "/", nil, cookie)
-	if !strings.Contains(response.Body.String(), "<h1>今天</h1>") {
+	if !strings.Contains(response.Body.String(), "房东</h1>") {
 		t.Fatal(response.Body)
 	}
 	form := url.Values{"landlord_name": {"Owner"}, "timezone": {"Mars/Olympus"}, "currency": {"EUR"}, "locale": {"en"}}
@@ -246,7 +246,7 @@ func TestSettingsAndEnglishUI(t *testing.T) {
 		t.Fatalf("save: %d %s", response.Code, response.Body)
 	}
 	response = a.request("GET", "/", nil, cookie)
-	for _, want := range []string{`lang="en"`, "<h1>Today</h1>", ">Settings</a>", ">Log out</button>"} {
+	for _, want := range []string{`lang="en"`, ", Owner</h1>", ">Settings</a>", ">Log out</button>"} {
 		if !strings.Contains(response.Body.String(), want) {
 			t.Fatalf("missing %q: %s", want, response.Body)
 		}

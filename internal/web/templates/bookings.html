@@ -58,28 +58,42 @@
 {{end}}
 
 {{define "calendar"}}
-<nav aria-label="{{t .Settings.Locale "calendar_month"}}"><ul>
-{{if .PreviousMonth}}<li><a rel="prev" href="/calendar?month={{.PreviousMonth}}">{{t .Settings.Locale "previous_month"}}</a></li>{{end}}
-<li><strong data-month="{{.Month}}">{{.Month}}</strong></li>
-{{if .NextMonth}}<li><a rel="next" href="/calendar?month={{.NextMonth}}">{{t .Settings.Locale "next_month"}}</a></li>{{end}}
-</ul><ul><li><a href="/calendar">{{t .Settings.Locale "today"}}</a></li><li><a href="/bookings/new">{{t .Settings.Locale "new_booking"}}</a></li></ul></nav>
-<p><span class="booking-legend stay">{{t .Settings.Locale "stay"}}</span> · <span class="booking-legend block">{{t .Settings.Locale "block"}}</span> · <span class="booking-legend lease">{{t .Settings.Locale "lease"}}</span> · {{t .Settings.Locale "calendar_hint"}}</p>
-<div class="overflow-auto"><table class="calendar-grid">
-<caption>{{.Month}} · {{t .Settings.Locale "calendar"}}</caption>
-<colgroup><col class="calendar-unit"><col span="{{len .Days}}"></colgroup>
-<thead><tr><th scope="col">{{t .Settings.Locale "unit_name"}}</th>{{range .Days}}<th scope="col" data-date="{{.Date}}" {{if .Today}}class="calendar-today" aria-current="date"{{end}}>{{.Number}}</th>{{end}}</tr></thead>
-{{range .CalendarProperties}}<tbody>
-<tr class="calendar-property"><th scope="rowgroup" colspan="{{len $.Days | calendarColumns}}">{{.Name}}</th></tr>
-{{range .Units}}<tr data-unit-id="{{.ID}}"><th scope="row">{{.Name}}</th>{{$unit := .ID}}{{range .Cells}}
-{{if .Occupants}}<td colspan="{{.Span}}" class="occupied {{(index .Occupants 0).Kind}}{{if .Conflict}} conflict{{end}}">
-{{range .Occupants}}
-{{$label := printf "#%d · %s" .ID (t $.Settings.Locale .Kind)}}
-{{if .Imported}}{{$label = printf "%s · %s" $label (t $.Settings.Locale .Channel)}}{{end}}
-{{if .GuestName}}{{$label = printf "%s · %s" $label .GuestName}}{{end}}
-{{if .Conflict}}{{$label = printf "%s · %s" $label (t $.Settings.Locale "conflict")}}{{end}}
-<a class="booking-bar{{if eq .Kind "lease"}} lease-bar{{end}}{{if .Imported}} imported channel-{{.Channel}}{{end}}{{if .Conflict}} conflict{{end}}" href="{{.URL}}" title="{{$label}} · {{.Dates}}">{{$label}}</a>{{end}}</td>
-{{else}}<td {{if .Today}}class="calendar-today"{{end}}><a class="calendar-empty" href="/bookings/new?unit={{$unit}}&amp;date={{.Date}}" aria-label="{{t $.Settings.Locale "new_booking"}} · {{.Date}}">+</a></td>{{end}}
-{{end}}</tr>{{end}}</tbody>{{else}}<tbody><tr><td>{{t .Settings.Locale "no_units"}}</td></tr></tbody>{{end}}
-</table></div>
-<script src="/static/calendar.js" defer></script>
+<div class="cal-toolbar">
+  <div class="month" aria-label="{{t .Settings.Locale "calendar_month"}}">
+    {{if .Calendar.PreviousMonth}}<a class="icon-btn" rel="prev" href="/calendar?month={{.Calendar.PreviousMonth}}{{if .CalendarPropertyFilter}}&amp;property={{.CalendarPropertyFilter}}{{end}}" aria-label="{{t .Settings.Locale "previous_month"}}"><svg class="icon"><use href="/static/icons.svg#left"/></svg></a>{{end}}
+    <h1 data-month="{{.Calendar.Month}}">{{.CalendarMonthLabel}}</h1>
+    {{if .Calendar.NextMonth}}<a class="icon-btn" rel="next" href="/calendar?month={{.Calendar.NextMonth}}{{if .CalendarPropertyFilter}}&amp;property={{.CalendarPropertyFilter}}{{end}}" aria-label="{{t .Settings.Locale "next_month"}}"><svg class="icon"><use href="/static/icons.svg#right"/></svg></a>{{end}}
+    <a class="btn btn-sm" id="go-today" href="/calendar{{if .CalendarPropertyFilter}}?property={{.CalendarPropertyFilter}}{{end}}">{{t .Settings.Locale "today"}}</a>
+  </div>
+  <div class="toolbar-right">
+    <form method="get" action="/calendar" class="calendar-filter"><input type="hidden" name="month" value="{{.Calendar.Month}}"><select class="select" name="property" aria-label="{{t .Settings.Locale "calendar_property_filter"}}"><option value="">{{t .Settings.Locale "all_properties"}}</option>{{range .Properties}}<option value="{{.ID}}" {{if eq $.CalendarPropertyFilter .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select><button class="btn btn-sm" type="submit">{{t .Settings.Locale "apply"}}</button></form>
+    <a class="btn btn-primary btn-sm" href="/bookings/new" hx-get="/bookings/new" hx-target="#drawer-body" data-drawer><svg class="icon"><use href="/static/icons.svg#plus"/></svg>{{t .Settings.Locale "calendar_new_booking"}}</a>
+  </div>
+</div>
+{{if .Calendar.ConflictCount}}<div class="conflict-banner" role="status"><svg class="icon"><use href="/static/icons.svg#alert"/></svg><div><b>{{.Calendar.ConflictCount}} {{t .Settings.Locale "calendar_conflicts"}}</b> · {{t .Settings.Locale "calendar_conflict_help"}}</div><a class="btn btn-sm" href="{{.Calendar.FirstConflictURL}}">{{t .Settings.Locale "calendar_view_conflict"}}</a></div>{{end}}
+<div class="legend">
+  <span><i class="sw stay"></i>{{t .Settings.Locale "stay"}}</span><span><i class="sw block"></i>{{t .Settings.Locale "block"}}</span><span><i class="sw lease"></i>{{t .Settings.Locale "calendar_lease"}}</span><span><i class="sw conflict"></i>{{t .Settings.Locale "conflict"}}</span>
+  <span>{{t .Settings.Locale "calendar_avatar_ring"}}<b style="color:var(--accent)">Airbnb</b> · <b style="color:#5578e0">VRBO</b> · <b style="color:var(--success)">{{t .Settings.Locale "direct"}}</b></span><span>{{t .Settings.Locale "calendar_click_hint"}}</span>
+</div>
+<div class="cal-wrap" id="cal-wrap"><div class="cal" id="cal" style="min-width:calc(var(--unitw) + {{.Calendar.HalfDays}} * 15px)">
+  <div class="cal-row head" style="grid-template-columns:var(--unitw) repeat({{.Calendar.HalfDays}}, minmax(15px,1fr))"><div class="unit-cell" style="font-size:13px;color:var(--text-muted)">{{t .Settings.Locale "calendar_unit"}}</div>
+  {{range .Calendar.Days}}<div data-date="{{.Date}}" class="day-head{{if .Weekend}} weekend{{end}}{{if .Today}} today{{end}}" {{if .Today}}id="today-col" aria-current="date"{{end}}>{{t $.Settings.Locale (printf "calendar_weekday_%d" .Weekday)}}<b>{{.Number}}</b></div>{{end}}</div>
+  {{range .Calendar.Properties}}
+  <div class="cal-row group" style="grid-template-columns:var(--unitw) repeat({{$.Calendar.HalfDays}}, minmax(15px,1fr))"><div class="group-label">{{.Name}}</div></div>
+  {{range .Units}}{{$unit := .}}
+  <div class="cal-row" data-unit-id="{{.ID}}" style="grid-template-columns:var(--unitw) repeat({{$.Calendar.HalfDays}}, minmax(15px,1fr));grid-template-rows:repeat({{.Lanes}},40px);padding:6px 0">
+    <div class="unit-cell"><span class="unit-thumb" style="background:{{if .HasLease}}#d6dcf3{{else if .Bars}}#cfe3d4{{else}}#eeeeee{{end}}"></span><div style="min-width:0"><div class="unit-name">{{.Name}}</div><div class="unit-kind">{{if .HasLease}}{{t $.Settings.Locale "calendar_lease"}}{{else if .Bars}}{{t $.Settings.Locale "calendar_short_stay"}}{{if .FeedCount}} · {{.FeedCount}} {{t $.Settings.Locale "calendar_feed_count"}}{{end}}{{else}}{{t $.Settings.Locale "calendar_vacant"}}{{end}}</div></div></div>
+    {{range $.Calendar.Days}}<a class="day-cell{{if .Weekend}} weekend{{end}}{{if .Today}} today{{end}}{{if .Past}} past{{end}}" style="grid-column:{{.Column}}/span 2" href="/bookings/new?unit={{$unit.ID}}&amp;date={{.Date}}" hx-get="/bookings/new?unit={{$unit.ID}}&amp;date={{.Date}}" hx-target="#drawer-body" data-drawer aria-label="{{t $.Settings.Locale "calendar_new_booking"}} · {{$unit.Name}} · {{.Date}}"></a>{{end}}
+    {{range .Bars}}
+    {{$label := printf "#%d · %s" .ID (t $.Settings.Locale .Kind)}}{{if .Channel}}{{$label = printf "%s · %s" $label (t $.Settings.Locale .Channel)}}{{end}}{{if .GuestName}}{{$label = printf "%s · %s" $label .GuestName}}{{end}}{{if .Conflict}}{{$label = printf "%s · %s" $label (t $.Settings.Locale "conflict")}}{{end}}
+    <a class="bar {{.Kind}}{{if .Past}} past{{end}}{{if .CutLeft}} cut-left{{end}}{{if .CutRight}} cut-right{{end}}{{if .Conflict}} conflict{{end}} channel-{{.Channel}}" href="{{.URL}}" title="{{$label}} · {{.StartsOn}} → {{if .EndsOn}}{{.EndsOn}}{{else}}{{t $.Settings.Locale "calendar_open_ended"}}{{end}}" style="grid-column:{{.StartColumn}}/{{.EndColumn}};grid-row:{{.Lane}}" data-start="{{.StartColumn}}" data-end="{{.EndColumn}}" data-lane="{{.Lane}}" {{if ne .Kind "lease"}}hx-get="{{.URL}}" hx-target="#drawer-body" data-drawer{{end}}>
+      {{if eq .Kind "stay"}}{{if .GuestName}}<span class="mini {{.Channel}}" style="background:{{.Color}}">{{.Initials}}</span>{{end}}{{if .Conflict}}<svg class="icon"><use href="/static/icons.svg#alert"/></svg>{{end}}<span class="n">{{if .GuestName}}{{.GuestName}}{{else}}{{t $.Settings.Locale "stay"}}{{end}}</span>
+      {{else if eq .Kind "lease"}}<span class="n">{{if .GuestName}}{{.GuestName}} · {{end}}{{t $.Settings.Locale "calendar_lease"}} · {{currency $.Settings.Currency .RentCents}}/{{t $.Settings.Locale "calendar_month_unit"}}</span>
+      {{else}}<span class="n">{{t $.Settings.Locale "block"}}{{if .Notes}} · {{.Notes}}{{end}}</span>{{end}}
+    </a>
+    {{end}}
+  </div>
+  {{end}}
+  {{else}}<div class="panel-pad">{{t .Settings.Locale "no_units"}}</div>{{end}}
+</div></div>
 {{end}}

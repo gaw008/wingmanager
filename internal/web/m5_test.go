@@ -33,18 +33,18 @@ func TestM5HTTPCreateActivateRentPaymentDepositVoidAndOverdue(t *testing.T) {
 			a.request(t, "POST", path+"/tenants", url.Values{"name": {"Tenant <script>x</script>"}, "email": {"tenant@example.com"}}, 303)
 			a.request(t, "POST", path+"/activate", nil, 303)
 			a.request(t, "GET", path, nil, 200, `id="lease-balance">3000.00`, "2026-08", "2026-09", "2026-10", "Tenant &lt;script&gt;x&lt;/script&gt;")
-			a.request(t, "GET", "/calendar?month=2026-10", nil, 200, `class="occupied lease"`, `href="`+path+`"`, catalogs[locale]["lease"])
+			a.request(t, "GET", "/calendar?month=2026-10", nil, 200, `class="bar lease`, `href="`+path+`"`, catalogs[locale]["lease"])
 			a.request(t, "POST", "/bookings/new", a.form("2026-10-30", "2026-11-01"), 409, catalogs[locale]["booking_lease_conflict"])
 			a.request(t, "POST", path+"/entries", url.Values{"kind": {"payment"}, "category": {"bank_transfer"}, "amount": {"1500.25"}, "occurred_on": {"2026-10-30"}}, 303)
 			a.request(t, "GET", path, nil, 200, `id="lease-balance">1499.75`)
 			// FIFO: August is paid, September partly paid, October remains wholly unpaid.
-			a.request(t, "GET", "/overdue", nil, 200, `data-lease-id="1"`, "1499.75", "2026-09-05", `56 `+catalogs[locale]["days_overdue"])
+			a.request(t, "GET", "/leases?filter=overdue", nil, 200, `data-lease-id="1"`, "1499.75", "2026-09-05", `56 `+catalogs[locale]["days_overdue"])
 			a.request(t, "POST", path+"/entries", url.Values{"kind": {"credit"}, "category": {"concession"}, "amount": {"499.75"}, "occurred_on": {"2026-10-31"}}, 303)
-			a.request(t, "GET", "/overdue", nil, 200, "2026-10-05", `26 `+catalogs[locale]["days_overdue"])
+			a.request(t, "GET", "/leases?filter=overdue", nil, 200, "2026-10-05", `26 `+catalogs[locale]["days_overdue"])
 			a.request(t, "POST", path+"/entries", url.Values{"kind": {"deposit_in"}, "category": {"deposit"}, "amount": {"2000.00"}, "occurred_on": {"2026-08-01"}}, 303)
 			a.request(t, "POST", path+"/apply-deposit", url.Values{"amount": {"1000.00"}, "occurred_on": {"2026-10-31"}, "memo": {"Deposit applied"}}, 303)
 			a.request(t, "GET", path, nil, 200, `id="lease-balance">0.00`, `id="deposit-held">1000.00`)
-			body := a.request(t, "GET", "/overdue", nil, 200)
+			body := a.request(t, "GET", "/leases?filter=overdue", nil, 200)
 			if strings.Contains(body, `data-lease-id=`) {
 				t.Fatal("fully paid lease remains overdue")
 			}

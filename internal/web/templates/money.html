@@ -1,5 +1,6 @@
 {{define "money_filters"}}
-<form method="get">
+<form method="get" action="/money">
+{{if eq .Page "reports"}}<input type="hidden" name="tab" value="reports">{{end}}
  <div class="grid">
   <label>{{t .Settings.Locale "properties"}}<select name="property"><option value="0">{{t .Settings.Locale "all_properties"}}</option>{{range .Properties}}<option value="{{.ID}}" {{if eq $.MoneyFilter.PropertyID .ID}}selected{{end}}>{{.Name}}{{if .ArchivedAt}} ({{t $.Settings.Locale "archived"}}){{end}}</option>{{end}}</select></label>
   <label>{{t .Settings.Locale "year"}}<input name="year" type="number" min="1" max="9999" value="{{.MoneyFilter.Year}}" required></label>
@@ -10,7 +11,7 @@
 {{end}}
 
 {{define "money_entries"}}
-<p><a href="/money/expense">{{t .Settings.Locale "add_expense"}}</a> · <a href="/money/income">{{t .Settings.Locale "add_income"}}</a> · <a href="/reports?year={{.MoneyFilter.Year}}&amp;property={{.MoneyFilter.PropertyID}}">{{t .Settings.Locale "reports"}}</a></p>
+<p><a href="/money/expense">{{t .Settings.Locale "add_expense"}}</a> · <a href="/money/income">{{t .Settings.Locale "add_income"}}</a> · <a href="/money?tab=reports&amp;year={{.MoneyFilter.Year}}&amp;property={{.MoneyFilter.PropertyID}}">{{t .Settings.Locale "reports"}}</a></p>
 {{template "money_filters" .}}
 <div class="overflow-auto"><table>
  <thead><tr><th>{{t .Settings.Locale "occurred_on"}}</th><th>{{t .Settings.Locale "properties"}}</th><th>{{t .Settings.Locale "entry_kind"}}</th><th>{{t .Settings.Locale "category"}}</th><th>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})</th><th>{{t .Settings.Locale "notes"}}</th><th>{{t .Settings.Locale "void_entry"}}</th></tr></thead>

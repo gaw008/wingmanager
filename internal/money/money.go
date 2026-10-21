@@ -66,3 +66,34 @@ func Format(cents int64) string {
 	}
 	return fmt.Sprintf("%s%d.%02d", sign, whole, fraction)
 }
+
+// FormatCurrency renders a display amount with grouped thousands and a currency
+// label. Whole amounts omit cents; form values should continue to use Format.
+func FormatCurrency(currency string, cents int64) string {
+	amount := Format(cents)
+	sign := ""
+	if strings.HasPrefix(amount, "-") {
+		sign, amount = "-", amount[1:]
+	}
+	parts := strings.SplitN(amount, ".", 2)
+	whole := parts[0]
+	first := len(whole) % 3
+	if first == 0 {
+		first = 3
+	}
+	var grouped strings.Builder
+	grouped.WriteString(whole[:first])
+	for i := first; i < len(whole); i += 3 {
+		grouped.WriteByte(',')
+		grouped.WriteString(whole[i : i+3])
+	}
+	if parts[1] != "00" {
+		grouped.WriteByte('.')
+		grouped.WriteString(parts[1])
+	}
+	symbol := map[string]string{"USD": "$", "EUR": "€", "GBP": "£", "CNY": "CN¥", "JPY": "JP¥", "CAD": "CA$", "AUD": "A$"}[currency]
+	if symbol == "" {
+		symbol = currency + " "
+	}
+	return sign + symbol + grouped.String()
+}

@@ -32,7 +32,7 @@ func (s *server) registerMoneyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /money/income", s.addMoney)
 	mux.HandleFunc("POST /money/income", s.addMoney)
 	mux.HandleFunc("POST /money/{id}/void", s.voidMoney)
-	mux.HandleFunc("GET /reports", s.reportMoney)
+	mux.HandleFunc("GET /reports", redirectView("/money", "tab", "reports"))
 	mux.HandleFunc("GET /reports/schedule-e.csv", s.reportMoney)
 	mux.HandleFunc("GET /reports/ledger.csv", s.reportMoney)
 }
@@ -59,6 +59,10 @@ func (s *server) moneyFilters(r *http.Request) (ledger.Filter, error) {
 }
 
 func (s *server) listMoney(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("tab") == "reports" {
+		s.reportMoney(w, r)
+		return
+	}
 	data := pageData{Page: "money"}
 	var err error
 	data.MoneyKinds = ledger.Kinds()
@@ -165,7 +169,7 @@ func (s *server) reportMoney(w http.ResponseWriter, r *http.Request) {
 		s.moneyResult(w, r, data, err)
 		return
 	}
-	if r.URL.Path == "/reports" {
+	if r.URL.Path == "/money" {
 		s.render(w, r, data, http.StatusOK)
 		return
 	}

@@ -47,20 +47,22 @@ type Config struct {
 }
 
 type pageData struct {
-	Page          string
-	Settings      settings.Settings
-	Locales       []string
-	SignedIn      bool
-	Error         string
-	Properties    []property.Property
-	Property      property.Property
-	Units         []property.Unit
-	People        []person.Person
-	Person        person.Person
-	FirstUnitName string
-	UnitName      string
-	ShowArchived  bool
-	Search        string
+	Navigation     []navigationItem
+	AccountInitial string
+	Page           string
+	Settings       settings.Settings
+	Locales        []string
+	SignedIn       bool
+	Error          string
+	Properties     []property.Property
+	Property       property.Property
+	Units          []property.Unit
+	People         []person.Person
+	Person         person.Person
+	FirstUnitName  string
+	UnitName       string
+	ShowArchived   bool
+	Search         string
 	bookingPage
 	feedPage
 	leasePage
@@ -80,8 +82,8 @@ func New(database *sql.DB, service *ical.Service, config Config) (http.Handler, 
 
 func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, config Config) (http.Handler, error) {
 	templates, err := template.New("pages").Funcs(template.FuncMap{
-		"money":           money.Format,
-		"calendarColumns": func(days int) int { return days + 1 },
+		"money":    money.Format,
+		"currency": money.FormatCurrency,
 		"syncError": func(locale, message string) string {
 			if message == ical.ErrEmptyFeed.Error() {
 				return catalogs[locale]["empty_feed_warning"]
@@ -261,6 +263,8 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, s
 	data.Settings = value
 	data.Locales = settings.Locales()
 	data.SignedIn = data.Page != "setup" && data.Page != "login"
+	data.Navigation = navigation(data.Page)
+	data.AccountInitial = accountInitial(value.LandlordName, value.Locale)
 	if err := s.loadDocumentPanel(r, &data); err != nil {
 		s.fail(w, err)
 		return
@@ -269,7 +273,14 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, s
 		data.FirstUnitName = catalogs[value.Locale]["default_unit_name"]
 	}
 	var body bytes.Buffer
-	if err := s.templates.ExecuteTemplate(&body, "base", data); err != nil {
+	templateName := "base"
+	if data.Page == "new_booking" || data.Page == "edit_booking" {
+		w.Header().Add("Vary", "HX-Request, HX-Target")
+	}
+	if r.Header.Get("HX-Request") == "true" && (r.Header.Get("HX-Target") == "drawer-body" || r.URL.Query().Get("drawer") == "1") && (data.Page == "new_booking" || data.Page == "edit_booking") {
+		templateName = "booking_drawer"
+	}
+	if err := s.templates.ExecuteTemplate(&body, templateName, data); err != nil {
 		s.fail(w, err)
 		return
 	}

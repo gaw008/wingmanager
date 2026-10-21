@@ -36,7 +36,7 @@ type leasePage struct {
 
 func (s *server) registerLeaseRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /leases", s.listLeases)
-	mux.HandleFunc("GET /overdue", s.listLeases)
+	mux.HandleFunc("GET /overdue", redirectView("/leases", "filter", "overdue"))
 	mux.HandleFunc("GET /leases/new", s.editLease)
 	mux.HandleFunc("POST /leases/new", s.editLease)
 	mux.HandleFunc("GET /leases/{id}", s.editLease)
@@ -45,7 +45,7 @@ func (s *server) registerLeaseRoutes(mux *http.ServeMux) {
 }
 func (s *server) listLeases(w http.ResponseWriter, r *http.Request) {
 	data := pageData{Page: "leases"}
-	if r.URL.Path == "/overdue" {
+	if r.URL.Query().Get("filter") == "overdue" {
 		data.Page = "overdue"
 	}
 	data.LeaseStatusFilter = r.URL.Query().Get("status")

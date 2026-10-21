@@ -170,13 +170,13 @@ func TestM3CalendarMonthTodayBarsAndActiveUnits(t *testing.T) {
 	if err := property.SetArchived(t.Context(), a.database, p, true); err != nil {
 		t.Fatal(err)
 	}
-	body := a.request(t, "GET", "/calendar", nil, 200, `data-month="2026-10"`, `data-date="2026-10-31" class="calendar-today" aria-current="date"`, `/calendar?month=2026-09`, `/calendar?month=2026-11`, "Beach house", "Whole home", fmt.Sprintf(`/bookings/%d`, stay), fmt.Sprintf(`/bookings/%d`, block), `colspan="2" class="occupied stay"`, `colspan="2" class="occupied block"`, fmt.Sprintf(`/bookings/new?unit=%d&amp;date=2026-10-03`, a.unitID))
+	body := a.request(t, "GET", "/calendar", nil, 200, `data-month="2026-10"`, `data-date="2026-10-31" class="day-head weekend today" id="today-col" aria-current="date"`, `/calendar?month=2026-09`, `/calendar?month=2026-11`, "Beach house", "Whole home", fmt.Sprintf(`/bookings/%d`, stay), fmt.Sprintf(`/bookings/%d`, block), `class="bar stay past cut-left channel-direct"`, `grid-column:2/7;grid-row:1`, `class="bar block cut-right channel-direct"`, `grid-column:61/64;grid-row:1`, fmt.Sprintf(`/bookings/new?unit=%d&amp;date=2026-10-03`, a.unitID))
 	for _, hidden := range []string{"Archived unit", "Archived property", "Hidden home", `data-date="2026-11-01"`} {
 		if strings.Contains(body, hidden) {
 			t.Fatalf("unexpected %q", hidden)
 		}
 	}
-	november := a.request(t, "GET", "/calendar?month=2026-11", nil, 200, `data-month="2026-11"`, `data-date="2026-11-30"`, `colspan="3" class="occupied block"`)
+	november := a.request(t, "GET", "/calendar?month=2026-11", nil, 200, `data-month="2026-11"`, `data-date="2026-11-30"`, `class="bar block cut-left channel-direct"`, `grid-column:2/9;grid-row:1`)
 	if strings.Contains(november, `aria-current="date"`) {
 		t.Fatal("today marker in wrong month")
 	}
@@ -187,7 +187,7 @@ func TestM3CalendarMonthTodayBarsAndActiveUnits(t *testing.T) {
 	path := fmt.Sprintf("/bookings/%d", stay)
 	a.request(t, "POST", path+"/cancel", nil, 303)
 	a.request(t, "POST", path+"/restore", nil, 303)
-	a.request(t, "GET", "/calendar", nil, 200, fmt.Sprintf(`class="booking-bar" href="/bookings/%d"`, stay))
+	a.request(t, "GET", "/calendar", nil, 200, fmt.Sprintf(`class="bar stay past cut-left channel-direct" href="/bookings/%d"`, stay))
 }
 
 func TestM3BookingFiltersAndExistingGuest(t *testing.T) {

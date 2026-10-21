@@ -47,24 +47,18 @@ func TestM8OptionalGuestLabelsAndCalendarTitles(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			body := a.request(t, "GET", "/", nil, http.StatusOK, "Guest unit · "+html.EscapeString(guest))
+			a.request(t, "GET", "/?tab=in", nil, http.StatusOK, "Guest unit · "+html.EscapeString(guest))
 			for _, test := range []struct {
-				section string
-				id      int64
-			}{
-				{"today-check-outs", ids[0]}, {"today-check-ins", ids[1]},
-				{"upcoming-check-ins", ids[2]}, {"upcoming-check-outs", ids[2]},
-			} {
-				start := strings.Index(body, `<section id="`+test.section+`">`)
-				if start < 0 {
-					t.Fatalf("missing section %s", test.section)
-				}
-				section := body[start : start+strings.Index(body[start:], "</section>")]
-				want := fmt.Sprintf(`<a href="/bookings/%d">Beach house / Whole home</a>`, test.id)
-				if !strings.Contains(section, want) {
-					t.Errorf("guestless label: want %s in %s", want, section)
+				tab string
+				id  int64
+			}{{"out", ids[0]}, {"in", ids[1]}, {"soon", ids[2]}} {
+				body := a.request(t, "GET", "/?tab="+test.tab, nil, http.StatusOK)
+				want := fmt.Sprintf(`href="/bookings/%d" data-booking-id="%d" title="Beach house · Whole home"`, test.id, test.id)
+				if !strings.Contains(body, want) || !strings.Contains(body, catalogs[locale]["unnamed_guest"]) {
+					t.Errorf("guestless card: want %s in %s", want, body)
 				}
 			}
+
 			dangling := regexp.MustCompile(`·\s*(</a>|</td>|</p>|&quot;|")`)
 			for _, path := range []string{"/", "/bookings", "/calendar?month=2026-10", "/calendar?month=2026-11"} {
 				body := a.request(t, "GET", path, nil, http.StatusOK)
@@ -74,15 +68,18 @@ func TestM8OptionalGuestLabelsAndCalendarTitles(t *testing.T) {
 				if !strings.HasPrefix(path, "/calendar") {
 					continue
 				}
-				bars := regexp.MustCompile(`<a class="booking-bar[^"]*" href="/bookings/\d+" title="([^"]*)">([^<]*)</a>`).FindAllStringSubmatch(body, -1)
+				bars := regexp.MustCompile(`<a class="bar [^"]*" href="/bookings/\d+" title="([^"]*)"`).FindAllStringSubmatch(body, -1)
 				if len(bars) == 0 {
 					t.Fatal("calendar has no booking bars")
 				}
 				for _, bar := range bars {
-					title, label := html.UnescapeString(bar[1]), html.UnescapeString(bar[2])
-					if !strings.HasPrefix(title, label+" · ") || !strings.Contains(title, " → ") {
-						t.Errorf("calendar title %q must include full label %q and dates", title, label)
+					title := html.UnescapeString(bar[1])
+					if !strings.HasPrefix(title, "#") || !strings.Contains(title, catalogs[locale]["stay"]) || !strings.Contains(title, " → ") {
+						t.Errorf("calendar title %q must include booking identity, kind and dates", title)
 					}
+				}
+				if !strings.Contains(body, html.EscapeString(guest)+" · 2026-10-31 → 2026-11-01") {
+					t.Error("calendar title lost the full escaped guest name and dates")
 				}
 			}
 		})
@@ -90,7 +87,7 @@ func TestM8OptionalGuestLabelsAndCalendarTitles(t *testing.T) {
 }
 
 func TestM8TodayFeedErrorDetailsPreserveRawError(t *testing.T) {
-	for _, test := range []struct{ locale, summary string }{{settings.LocaleChinese, "同步失败"}, {settings.LocaleEnglish, "Sync failed"}} {
+	for _, test := range []struct{ locale, summary string }{{settings.LocaleChinese, "技术详情"}, {settings.LocaleEnglish, "Technical details"}} {
 		t.Run(test.locale, func(t *testing.T) {
 			a := newM3App(t, test.locale)
 			feedServer := httptest.NewServer(http.NotFoundHandler())

@@ -37,3 +37,13 @@ SELECT check_in, check_out FROM bookings WHERE unit_id = ? AND status = 'confirm
 
 -- name: occupyingLeases :many
 SELECT * FROM leases WHERE unit_id = ? AND status = 'active' AND id != ?;
+
+-- name: currentLeases :many
+SELECT sqlc.embed(l), p.name AS property_name, u.name AS unit_name,
+       cast(coalesce((SELECT group_concat(name, ', ') FROM
+           (SELECT g.name FROM lease_tenants lt JOIN people g ON g.id = lt.person_id
+            WHERE lt.lease_id = l.id ORDER BY g.name, g.id)), '') AS TEXT) AS tenant_names
+FROM leases l JOIN units u ON u.id = l.unit_id JOIN properties p ON p.id = u.property_id
+WHERE l.status = 'active' AND l.starts_on <= sqlc.arg(today)
+  AND (l.ends_on IS NULL OR l.ends_on >= sqlc.arg(today))
+ORDER BY p.name, p.id, u.name, u.id;

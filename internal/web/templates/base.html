@@ -4,33 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{t .Settings.Locale .Page}} · wingmanager</title>
-  <link rel="stylesheet" href="/static/pico-2.0.6.min.css">
-  <link rel="stylesheet" href="/static/calendar.css">
+  <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx-2.0.4.min.js" defer></script>
   <script src="/static/ical.js" defer></script>
+  <script src="/static/app.js" defer></script>
 </head>
-<body>
-  <header class="container">
-    <nav aria-label="wingmanager">
-      <ul><li><strong>wingmanager</strong></li></ul>
-      {{if .SignedIn}}<ul>
-        <li><a href="/">{{t .Settings.Locale "today"}}</a></li>
-        <li><a href="/properties">{{t .Settings.Locale "properties"}}</a></li>
-        <li><a href="/people">{{t .Settings.Locale "people"}}</a></li>
-        <li><a href="/calendar">{{t .Settings.Locale "calendar"}}</a></li>
-        <li><a href="/bookings">{{t .Settings.Locale "bookings"}}</a></li>
-        <li><a href="/leases">{{t .Settings.Locale "leases"}}</a></li>
-<li><a href="/overdue">{{t .Settings.Locale "overdue"}}</a></li>
-<li><a href="/money">{{t .Settings.Locale "money"}}</a></li>
-<li><a href="/reports">{{t .Settings.Locale "reports"}}</a></li>
-<li><a href="/tasks">{{t .Settings.Locale "tasks"}}</a></li>
-<li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
-        <li><form method="post" action="/logout"><button type="submit" class="outline">{{t .Settings.Locale "logout"}}</button></form></li>
-      </ul>{{end}}
-    </nav>
-  </header>
-  <main class="container">
-    <h1>{{t .Settings.Locale .Page}}</h1>
+<body class="page-{{.Page}}">
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#logo"/></svg>wingmanager</a>
+    {{if .SignedIn}}
+    <nav class="nav" aria-label="{{t .Settings.Locale "primary_navigation"}}">{{template "nav_links" .}}</nav>
+    <details class="account-menu">
+      <summary class="account" aria-label="{{t .Settings.Locale "account_menu"}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#menu"/></svg><span class="avatar">{{.AccountInitial}}</span></summary>
+      <div class="menu">
+        <a href="/properties">{{t .Settings.Locale "properties_units"}}</a>
+        <a href="/people">{{t .Settings.Locale "people"}}</a>
+        <a href="/tasks">{{t .Settings.Locale "tasks"}}</a>
+        <a href="/settings">{{t .Settings.Locale "settings"}}</a>
+        <form method="post" action="/logout"><button type="submit">{{t .Settings.Locale "logout"}}</button></form>
+      </div>
+    </details>{{end}}
+  </div>
+</header>
+<main{{if and (ne .Page "today") (ne .Page "calendar")}} class="legacy-page"{{end}}>
+  {{if and (ne .Page "today") (ne .Page "calendar")}}<div class="page-head"><h1>{{t .Settings.Locale .Page}}</h1></div>{{end}}
     {{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
     {{if eq .Page "today"}}{{template "today" .}}{{end}}
     {{if eq .Page "setup"}}{{template "setup" .}}{{end}}
@@ -57,6 +55,22 @@
     {{if eq .Page "money_detail"}}{{template "money_detail" .}}{{end}}
     {{if eq .Page "document_error"}}{{template "document_error" .}}{{end}}
     {{if .DocumentPanel.UploadPath}}{{template "documents" .DocumentPanel}}{{end}}
-  </main>
+</main>
+{{if .SignedIn}}
+<nav class="tabbar" aria-label="{{t .Settings.Locale "mobile_navigation"}}">{{template "nav_links" .}}</nav>
+<div class="scrim" id="scrim" data-close-overlay hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" tabindex="-1" hidden inert>
+  <div class="drawer-head"><h3 id="drawer-title">{{t .Settings.Locale "booking_label"}}</h3><button type="button" class="icon-btn" data-close-overlay aria-label="{{t .Settings.Locale "close"}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#x"/></svg></button></div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+{{end}}
 </body>
 </html>{{end}}
+{{define "nav_links"}}
+{{range .Navigation}}<a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"/></svg>{{t $.Settings.Locale .Key}}</a>{{end}}
+{{end}}
+{{define "booking_drawer"}}
+{{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+<h2>{{t .Settings.Locale .Page}}</h2>
+{{template "booking_form" .}}
+{{end}}
