@@ -117,46 +117,8 @@ type Summary struct {
 }
 
 func summarize(entries []Entry, today civildate.Date) (Summary, error) {
-	var result Summary
-	var offsets int64
-	for _, v := range entries {
-		if v.VoidedAt != "" {
-			continue
-		}
-		switch v.Kind {
-		case KindCharge:
-			result.BalanceCents += v.AmountCents
-		case KindCredit, KindPayment:
-			result.BalanceCents -= v.AmountCents
-			offsets += v.AmountCents
-		case KindDepositIn:
-			result.DepositHeldCents += v.AmountCents
-		case KindDepositOut:
-			result.DepositHeldCents -= v.AmountCents
-		}
-	}
-	if result.BalanceCents <= 0 {
-		return result, nil
-	}
-	for _, v := range entries {
-		if v.VoidedAt != "" || v.Kind != KindCharge {
-			continue
-		}
-		if offsets >= v.AmountCents {
-			offsets -= v.AmountCents
-			continue
-		}
-		result.OldestUnpaidOn = v.OccurredOn
-		due, err := civildate.Parse(v.OccurredOn)
-		if err != nil {
-			return Summary{}, err
-		}
-		if due.Compare(today) < 0 {
-			result.DaysOverdue = int(today.MidnightUTC().Sub(due.MidnightUTC()).Hours() / 24)
-		}
-		break
-	}
-	return result, nil
+	summary, _, charges := allocate(entries)
+	return overdueSummary(summary, charges, today)
 }
 
 // Balance includes all non-voided entries; today is in the owner's configured zone.

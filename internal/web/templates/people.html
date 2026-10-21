@@ -1,29 +1,14 @@
 {{define "people"}}
-<p><a href="/people/new">{{t .Settings.Locale "new_person"}}</a></p>
-<form method="get" action="/people">
-  <label for="q">{{t .Settings.Locale "search_name"}}</label>
-  <input id="q" name="q" value="{{.Search}}" type="search">
-  <button type="submit">{{t .Settings.Locale "search"}}</button>
-</form>
-{{range .People}}
-<article>
-  <h2><a href="/people/{{.ID}}">{{.Name}}</a></h2>
-  <p>{{.Email}} {{.Phone}}</p><p>{{.Notes}}</p>
-  <a href="/people/{{.ID}}/edit">{{t $.Settings.Locale "edit"}}</a>
-</article>
-{{else}}<p>{{t .Settings.Locale "no_people"}}</p>{{end}}
+<div class="page-head"><div><h1>{{t .Settings.Locale "people"}}</h1><p class="sub">{{t .Settings.Locale "people_intro"}}</p></div><a class="btn btn-primary" href="/people/new"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#plus"/></svg>{{t .Settings.Locale "new_person"}}</a></div>
+<form class="filter-form" method="get" action="/people"><label class="field" for="q"><span class="field-label">{{t .Settings.Locale "search_name"}}</span><input class="input" id="q" name="q" value="{{.Search}}" type="search"></label><button class="btn" type="submit">{{t .Settings.Locale "search"}}</button></form>
+{{if .People}}<div class="list">{{range .People}}<article class="row" data-person-id="{{.ID}}"><span class="row-icon"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#phone"/></svg></span><div class="row-body"><div class="row-title"><a href="/people/{{.ID}}">{{.Name}}</a></div><div class="row-sub">{{if .Email}}<a href="mailto:{{.Email}}">{{.Email}}</a>{{end}}{{if and .Email .Phone}} · {{end}}{{if .Phone}}<a href="tel:{{.Phone}}">{{.Phone}}</a>{{end}}</div>{{if .Notes}}<p class="meta">{{.Notes}}</p>{{end}}</div><a class="btn btn-sm" href="/people/{{.ID}}/edit">{{t $.Settings.Locale "edit"}}</a></article>{{end}}</div>{{else}}<div class="empty"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#phone"/></svg><strong>{{t .Settings.Locale "no_people"}}</strong><a class="btn btn-primary" href="/people/new">{{t .Settings.Locale "new_person"}}</a></div>{{end}}
 {{end}}
 
 {{define "person_form"}}
-<form method="post">
-  <label for="name">{{t .Settings.Locale "name"}}</label>
-  <input id="name" name="name" value="{{.Person.Name}}" autocomplete="name" required>
-  <label for="email">{{t .Settings.Locale "email"}}</label>
-  <input id="email" name="email" value="{{.Person.Email}}" type="email" autocomplete="email">
-  <label for="phone">{{t .Settings.Locale "phone"}}</label>
-  <input id="phone" name="phone" value="{{.Person.Phone}}" type="tel" autocomplete="tel">
-  <label for="notes">{{t .Settings.Locale "notes"}}</label>
-  <textarea id="notes" name="notes">{{.Person.Notes}}</textarea>
-  <button type="submit">{{t .Settings.Locale "save"}}</button>
-</form>
+<div class="crumbs"><a href="/people">{{t .Settings.Locale "people"}}</a><span aria-hidden="true">›</span><span>{{t .Settings.Locale .Page}}</span></div><div class="page-head"><h1>{{t .Settings.Locale .Page}}</h1></div>
+<form class="panel panel-pad form-panel" method="post" action="{{if eq .Page "new_person"}}/people/new{{else}}/people/{{.Person.ID}}/edit{{end}}">
+<label class="field" for="name"><span class="field-label">{{t .Settings.Locale "name"}}</span><input class="input" id="name" name="name" value="{{.Person.Name}}" autocomplete="name" required></label>
+<div class="field-row"><label class="field" for="email"><span class="field-label">{{t .Settings.Locale "email"}}</span><input class="input" id="email" name="email" value="{{.Person.Email}}" type="email" autocomplete="email"></label><label class="field" for="phone"><span class="field-label">{{t .Settings.Locale "phone"}}</span><input class="input" id="phone" name="phone" value="{{.Person.Phone}}" type="tel" autocomplete="tel"></label></div>
+<label class="field" for="notes"><span class="field-label">{{t .Settings.Locale "notes"}}</span><textarea class="input" id="notes" name="notes" rows="4">{{.Person.Notes}}</textarea></label>
+<div class="form-actions"><a class="btn btn-ghost" href="/people">{{t .Settings.Locale "cancel"}}</a><button class="btn btn-primary" type="submit">{{t .Settings.Locale "save"}}</button></div></form>
 {{end}}

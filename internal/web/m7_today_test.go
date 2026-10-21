@@ -179,8 +179,8 @@ func TestM7TodayAnswersLandlordQuestionsInConfiguredTimezone(t *testing.T) {
 			}
 			cleaning, err := task.CleaningForBooking(ctx, a.database, departing)
 			must(err)
-			if cleaning == nil || !strings.Contains(attention, fmt.Sprintf(`<a href="/tasks/%d">%s</a>`, cleaning.ID, catalogs[locale][task.KindCleaning])) {
-				t.Fatal("generated cleaning task is missing its translated title")
+			if cleaning == nil || !strings.Contains(attention, fmt.Sprintf(`<a href="/tasks/%d">Beach house · %s %s</a>`, cleaning.ID, unit.Name, catalogs[locale]["checkout_cleaning"])) {
+				t.Fatal("generated cleaning task is missing its unit and translated checkout-cleaning reason")
 			}
 			for _, hidden := range []string{"Future repair", "Undated repair", "Completed repair", "Cancelled repair"} {
 				if strings.Contains(attention, hidden) {

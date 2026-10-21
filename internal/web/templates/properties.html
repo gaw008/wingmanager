@@ -1,91 +1,37 @@
 {{define "properties"}}
-<p><a href="/properties/new">{{t .Settings.Locale "new_property"}}</a></p>
-<form method="get" action="/properties">
-  <label><input type="checkbox" name="archived" value="1" {{if .ShowArchived}}checked{{end}}> {{t .Settings.Locale "show_archived"}}</label>
-  <button type="submit">{{t .Settings.Locale "apply"}}</button>
-</form>
-{{range .Properties}}
-<article>
-  <h2><a href="/properties/{{.ID}}">{{.Name}}</a> {{if .ArchivedAt}}<small>{{t $.Settings.Locale "archived"}}</small>{{end}}</h2>
-  <p>{{.Address}}</p>
-</article>
-{{else}}<p>{{t .Settings.Locale "no_properties"}}</p>{{end}}
+<div class="page-head"><div><h1>{{t .Settings.Locale "properties_units"}}</h1><p class="sub">{{t .Settings.Locale "properties_intro"}}</p></div><a class="btn btn-primary" href="/properties/new"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#plus"/></svg>{{t .Settings.Locale "new_property"}}</a></div>
+<form class="filter-form" method="get" action="/properties"><label class="check-label"><input type="checkbox" name="archived" value="1" {{if .ShowArchived}}checked{{end}}> {{t .Settings.Locale "show_archived"}}</label><button class="btn btn-sm" type="submit">{{t .Settings.Locale "apply"}}</button></form>
+<div class="card-grid">
+{{range .Properties}}<article class="property-card panel panel-pad" data-property-id="{{.ID}}"><div class="section-head"><span class="row-icon"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#logo"/></svg></span>{{if .ArchivedAt}}<span class="badge">{{t $.Settings.Locale "archived"}}</span>{{end}}</div><h2><a href="/properties/{{.ID}}">{{.Name}}</a></h2><p class="meta">{{if .Address}}{{.Address}}{{else}}{{t $.Settings.Locale "address_not_set"}}{{end}}</p><a class="link" href="/properties/{{.ID}}">{{t $.Settings.Locale "view_units"}} <span aria-hidden="true">→</span></a></article>
+{{else}}<div class="empty"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#logo"/></svg><strong>{{t .Settings.Locale "no_properties"}}</strong><a class="btn btn-primary" href="/properties/new">{{t .Settings.Locale "new_property"}}</a></div>{{end}}
+</div>
 {{end}}
 
 {{define "property_form"}}
-<form method="post">
-  <label for="name">{{t .Settings.Locale "name"}}</label>
-  <input id="name" name="name" value="{{.Property.Name}}" required>
-  <label for="address">{{t .Settings.Locale "address"}}</label>
-  <input id="address" name="address" value="{{.Property.Address}}">
-  <label for="notes">{{t .Settings.Locale "notes"}}</label>
-  <textarea id="notes" name="notes">{{.Property.Notes}}</textarea>
-  {{if eq .Page "new_property"}}
-  <label for="first_unit_name">{{t .Settings.Locale "first_unit_name"}}</label>
-  <input id="first_unit_name" name="first_unit_name" value="{{.FirstUnitName}}" required>
-  {{end}}
-  <button type="submit">{{t .Settings.Locale "save"}}</button>
+<div class="crumbs"><a href="/properties">{{t .Settings.Locale "properties_units"}}</a><span aria-hidden="true">›</span><span>{{t .Settings.Locale .Page}}</span></div>
+<div class="page-head"><h1>{{t .Settings.Locale .Page}}</h1></div>
+<form class="panel panel-pad form-panel" method="post" action="{{if eq .Page "new_property"}}/properties/new{{else}}/properties/{{.Property.ID}}/edit{{end}}">
+<label class="field" for="name"><span class="field-label">{{t .Settings.Locale "name"}}</span><input class="input" id="name" name="name" value="{{.Property.Name}}" required></label>
+<label class="field" for="address"><span class="field-label">{{t .Settings.Locale "address"}}</span><input class="input" id="address" name="address" value="{{.Property.Address}}"></label>
+{{if eq .Page "new_property"}}<label class="field" for="first_unit_name"><span class="field-label">{{t .Settings.Locale "first_unit_name"}}</span><input class="input" id="first_unit_name" name="first_unit_name" value="{{.FirstUnitName}}" required></label>{{end}}
+<label class="field" for="notes"><span class="field-label">{{t .Settings.Locale "notes"}}</span><textarea class="input" id="notes" name="notes" rows="4">{{.Property.Notes}}</textarea></label>
+<div class="form-actions"><a class="btn btn-ghost" href="/properties">{{t .Settings.Locale "cancel"}}</a><button class="btn btn-primary" type="submit">{{t .Settings.Locale "save"}}</button></div>
 </form>
 {{end}}
 
 {{define "property_detail"}}
-<h2>{{.Property.Name}} {{if .Property.ArchivedAt}}<small>{{t .Settings.Locale "archived"}}</small>{{end}}</h2>
-<p>{{.Property.Address}}</p><p>{{.Property.Notes}}</p>
-<p><a href="/properties/{{.Property.ID}}/edit">{{t .Settings.Locale "edit_property"}}</a></p>
-<form method="post" action="/properties/{{.Property.ID}}/{{if .Property.ArchivedAt}}restore{{else}}archive{{end}}">
-  <button type="submit" class="secondary">{{if .Property.ArchivedAt}}{{t .Settings.Locale "restore"}}{{else}}{{t .Settings.Locale "archive"}}{{end}}</button>
-</form>
-<h2>{{t .Settings.Locale "units"}}</h2>
-<form method="get" action="/properties/{{.Property.ID}}">
-  <label><input type="checkbox" name="archived" value="1" {{if .ShowArchived}}checked{{end}}> {{t .Settings.Locale "show_archived"}}</label>
-  <button type="submit">{{t .Settings.Locale "apply"}}</button>
-</form>
-{{range .Units}}
-<article>
-  <h3><a href="/units/{{.ID}}">{{.Name}}</a> {{if .ArchivedAt}}<small>{{t $.Settings.Locale "archived"}}</small>{{end}}</h3>
-  <form method="post" action="/units/{{.ID}}/rename{{if $.ShowArchived}}?archived=1{{end}}">
-    <label for="unit-name-{{.ID}}">{{t $.Settings.Locale "unit_name"}}</label>
-    <input id="unit-name-{{.ID}}" name="name" value="{{.Name}}" required>
-    <button type="submit">{{t $.Settings.Locale "rename"}}</button>
-  </form>
-  <form method="post" action="/units/{{.ID}}/{{if .ArchivedAt}}restore{{else}}archive{{end}}{{if $.ShowArchived}}?archived=1{{end}}">
-    <button type="submit" class="secondary">{{if .ArchivedAt}}{{t $.Settings.Locale "restore"}}{{else}}{{t $.Settings.Locale "archive"}}{{end}}</button>
-  </form>
-  <label for="unit-token-{{.ID}}">{{t $.Settings.Locale "export_url"}}</label>
-  <input id="unit-token-{{.ID}}" value="{{index $.ExportURLs .ID}}" readonly>
-  <button type="button" data-copy-target="unit-token-{{.ID}}" data-copied="{{t $.Settings.Locale "copied"}}" data-copy-error="{{t $.Settings.Locale "copy_error"}}">{{t $.Settings.Locale "copy"}}</button>
-  <p>{{t $.Settings.Locale "regenerate_token_hint"}}</p>
-  <form method="post" action="/units/{{.ID}}/token{{if $.ShowArchived}}?archived=1{{end}}">
-    <button type="submit" class="outline">{{t $.Settings.Locale "regenerate_token"}}</button>
-  </form>
-  <h4>{{t $.Settings.Locale "feeds"}}</h4>
-  {{range index $.Feeds .ID}}
-  <section data-feed-id="{{.ID}}">
-    <p>{{t $.Settings.Locale .Channel}} · <span class="feed-url" title="{{.URL}}">{{.URL}}</span></p>
-    <p>{{t $.Settings.Locale "last_success"}}: {{if .LastSuccessAt}}<time>{{.LastSuccessAt}}</time>{{else}}{{t $.Settings.Locale "never_synced"}}{{end}}</p>
-    {{if .LastError}}<p role="alert">{{t $.Settings.Locale "sync_error"}}: {{syncError $.Settings.Locale .LastError}}</p>{{end}}
-    <form method="post" action="/feeds/{{.ID}}/sync"><button type="submit">{{t $.Settings.Locale "sync_now"}}</button></form>
-    <details><summary>{{t $.Settings.Locale "edit"}}</summary>
-      <form method="post" action="/feeds/{{.ID}}/edit">
-      <label>{{t $.Settings.Locale "channel"}}<select name="channel">{{$channel := .Channel}}{{range $.FeedChannels}}<option value="{{.}}" {{if eq . $channel}}selected{{end}}>{{t $.Settings.Locale .}}</option>{{end}}</select></label>
-      <label>{{t $.Settings.Locale "feed_url"}}<input type="url" name="url" value="{{.URL}}" required></label>
-      <button type="submit">{{t $.Settings.Locale "save"}}</button></form>
-    </details>
-    <form method="post" action="/feeds/{{.ID}}/remove" data-confirm="{{t $.Settings.Locale "remove_feed_hint"}}"><button type="submit" class="secondary">{{t $.Settings.Locale "remove_feed"}}</button></form>
-  </section>
-  {{else}}<p>{{t $.Settings.Locale "no_feeds"}}</p>{{end}}
-  <details><summary>{{t $.Settings.Locale "add_feed"}}</summary>
-  <form method="post" action="/units/{{.ID}}/feeds">
-    <label>{{t $.Settings.Locale "channel"}}<select name="channel">{{range $.FeedChannels}}<option value="{{.}}">{{t $.Settings.Locale .}}</option>{{end}}</select></label>
-    <label>{{t $.Settings.Locale "feed_url"}}<input type="url" name="url" required></label>
-    <button type="submit">{{t $.Settings.Locale "add_feed"}}</button>
-  </form></details>
-</article>
-{{else}}<p>{{t .Settings.Locale "no_units"}}</p>{{end}}
-<h3>{{t .Settings.Locale "add_unit"}}</h3>
-<form method="post" action="/properties/{{.Property.ID}}/units">
-  <label for="unit-name">{{t .Settings.Locale "unit_name"}}</label>
-  <input id="unit-name" name="name" value="{{.UnitName}}" required>
-  <button type="submit">{{t .Settings.Locale "add_unit"}}</button>
-</form>
+<div class="crumbs"><a href="/properties">{{t .Settings.Locale "properties_units"}}</a><span aria-hidden="true">›</span><span>{{.Property.Name}}</span></div>
+<div class="page-head"><div><div class="title-row"><h1>{{.Property.Name}}</h1>{{if .Property.ArchivedAt}}<span class="badge">{{t .Settings.Locale "archived"}}</span>{{end}}</div><p class="sub">{{.Property.Address}}</p></div><div class="head-actions"><a class="btn" href="/properties/{{.Property.ID}}/edit">{{t .Settings.Locale "edit_property"}}</a><form method="post" action="/properties/{{.Property.ID}}/{{if .Property.ArchivedAt}}restore{{else}}archive{{end}}"><button class="btn" type="submit">{{if .Property.ArchivedAt}}{{t .Settings.Locale "restore"}}{{else}}{{t .Settings.Locale "archive"}}{{end}}</button></form></div></div>
+{{if .Property.Notes}}<section class="panel panel-pad"><h3>{{t .Settings.Locale "notes"}}</h3><p class="meta">{{.Property.Notes}}</p></section>{{end}}
+<section><div class="section-head"><h2>{{t .Settings.Locale "units"}}</h2><a class="link" href="/bookings?section=sync">{{t .Settings.Locale "manage_calendar_sync"}}</a></div>
+<form class="filter-form" method="get" action="/properties/{{.Property.ID}}"><label class="check-label"><input type="checkbox" name="archived" value="1" {{if .ShowArchived}}checked{{end}}> {{t .Settings.Locale "show_archived"}}</label><button class="btn btn-sm" type="submit">{{t .Settings.Locale "apply"}}</button></form>
+<div class="card-grid">
+{{range .Units}}<article class="panel panel-pad" data-unit-id="{{.ID}}"><div class="section-head"><h3><a class="link" href="/units/{{.ID}}">{{.Name}}</a></h3>{{if .ArchivedAt}}<span class="badge">{{t $.Settings.Locale "archived"}}</span>{{end}}</div>
+<details><summary>{{t $.Settings.Locale "rename"}}</summary><form method="post" action="/units/{{.ID}}/rename{{if $.ShowArchived}}?archived=1{{end}}"><label class="field" for="unit-name-{{.ID}}"><span class="field-label">{{t $.Settings.Locale "unit_name"}}</span><input class="input" id="unit-name-{{.ID}}" name="name" value="{{.Name}}" required></label><button class="btn btn-sm" type="submit">{{t $.Settings.Locale "save"}}</button></form></details>
+<label class="field" for="unit-token-{{.ID}}"><span class="field-label">{{t $.Settings.Locale "export_url"}}</span><input class="input" id="unit-token-{{.ID}}" value="{{index $.ExportURLs .ID}}" readonly></label><button class="btn btn-sm" type="button" data-copy-target="unit-token-{{.ID}}" data-copied="{{t $.Settings.Locale "copied"}}" data-copy-error="{{t $.Settings.Locale "copy_error"}}">{{t $.Settings.Locale "copy"}}</button>
+<p class="hint">{{t $.Settings.Locale "regenerate_token_hint"}}</p>
+<div class="form-actions"><form method="post" action="/units/{{.ID}}/token{{if $.ShowArchived}}?archived=1{{end}}"><button class="btn btn-sm" type="submit">{{t $.Settings.Locale "regenerate_token"}}</button></form><form method="post" action="/units/{{.ID}}/{{if .ArchivedAt}}restore{{else}}archive{{end}}{{if $.ShowArchived}}?archived=1{{end}}"><button class="btn btn-sm" type="submit">{{if .ArchivedAt}}{{t $.Settings.Locale "restore"}}{{else}}{{t $.Settings.Locale "archive"}}{{end}}</button></form></div>
+</article>{{else}}<div class="empty"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#bed"/></svg><strong>{{t .Settings.Locale "no_units"}}</strong><a class="btn btn-primary" href="#add-unit">{{t .Settings.Locale "add_unit"}}</a></div>{{end}}
+</div></section>
+<section id="add-unit" class="panel panel-pad form-panel"><div class="section-head"><h2>{{t .Settings.Locale "add_unit"}}</h2></div><form method="post" action="/properties/{{.Property.ID}}/units"><label class="field" for="unit-name"><span class="field-label">{{t .Settings.Locale "unit_name"}}</span><input class="input" id="unit-name" name="name" value="{{.UnitName}}" required></label><button class="btn btn-primary" type="submit">{{t .Settings.Locale "add_unit"}}</button></form></section>
 {{end}}

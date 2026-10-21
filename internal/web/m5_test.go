@@ -71,7 +71,8 @@ func TestM5HTTPCreateActivateRentPaymentDepositVoidAndOverdue(t *testing.T) {
 			form.Set("rent", "1200.50")
 			a.request(t, "POST", path+"/edit", form, 303)
 			a.request(t, "POST", path+"/end", url.Values{"ends_on": {"2026-10-31"}}, 303)
-			a.request(t, "GET", path, nil, 200, catalogs[locale]["ended"], `name="rent" type="number" min="0.01" step="0.01" value="1200.50" required readonly`)
+			a.request(t, "GET", path, nil, 200, catalogs[locale]["ended"], "1200.50")
+			a.request(t, "GET", path+"/edit", nil, 200, `name="rent" type="number" min="0.01" step="0.01" value="1200.50" required readonly`)
 			a.request(t, "GET", "/leases?status=ended", nil, 200, `data-lease-id="1"`)
 		})
 	}

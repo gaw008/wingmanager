@@ -116,7 +116,7 @@ func TestM3HTTPCellTurnoverConflictAndLifecycle(t *testing.T) {
 				t.Fatalf("booking=%+v", first)
 			}
 			firstPath := fmt.Sprintf("/bookings/%d", first.ID)
-			a.request(t, "GET", firstPath, nil, 200, "Guest &lt;script&gt;alert(1)&lt;/script&gt;", `value="airbnb" selected`, `value="2026-10-12"`)
+			a.request(t, "GET", firstPath+"/edit", nil, 200, "Guest &lt;script&gt;alert(1)&lt;/script&gt;", `value="airbnb" selected`, `value="2026-10-12"`)
 			// Same-day turnover succeeds through the exact form used by the UI.
 			secondForm := a.form("2026-10-12", "2026-10-14")
 			a.request(t, "POST", "/bookings/new", secondForm, 303)
@@ -132,7 +132,7 @@ func TestM3HTTPCellTurnoverConflictAndLifecycle(t *testing.T) {
 			a.request(t, "POST", "/bookings/new", replacement, 303)
 			a.request(t, "POST", firstPath+"/restore", nil, 409, catalogs[locale]["booking_conflict"])
 			a.request(t, "GET", "/bookings?status=cancelled", nil, 200, `data-booking-id="`+fmt.Sprint(first.ID)+`"`)
-			a.request(t, "GET", "/bookings?unit="+fmt.Sprint(a.unitID), nil, 200, "Guest &lt;script&gt;alert(1)&lt;/script&gt;")
+			a.request(t, "GET", "/bookings?tab=cancelled&unit="+fmt.Sprint(a.unitID), nil, 200, "Guest &lt;script&gt;alert(1)&lt;/script&gt;")
 			a.request(t, "POST", "/bookings/new", a.form("2026-10-20", "2026-10-20"), 400, catalogs[locale]["invalid_booking"])
 			a.request(t, "GET", "/bookings/9999", nil, 404, catalogs[locale]["not_found"])
 		})

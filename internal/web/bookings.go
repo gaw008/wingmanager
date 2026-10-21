@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gaw008/wingmanager/internal/booking"
 	"github.com/gaw008/wingmanager/internal/civildate"
@@ -25,11 +26,17 @@ type bookingRow struct {
 	booking.Booking
 	UnitLabel, GuestName string
 	Conflict             bool
+	State                booking.ViewState
+	Initials             string
 }
 
 // bookingPage holds the booking forms and the calendar derived from existing records.
 type bookingPage struct {
 	Booking                    booking.Booking
+	BookingReadOnly            bool
+	BookingDetail              bookingRow
+	BookingTab, BookingSection string
+	BookingTabs                []reservationTab
 	Cleaning                   *task.Task
 	SourceURL                  string
 	NewGuest                   person.Details
@@ -90,7 +97,11 @@ func bookingRows(values []booking.Booking, data pageData) []bookingRow {
 }
 
 func (s *server) listBookings(w http.ResponseWriter, r *http.Request) {
-	data := pageData{Page: "bookings"}
+	s.renderBookingList(w, r, pageData{})
+}
+
+func (s *server) renderBookingList(w http.ResponseWriter, r *http.Request, data pageData) {
+	data.Page = "bookings"
 	data.Statuses = booking.Statuses()
 	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
 		s.fail(w, err)
@@ -111,15 +122,54 @@ func (s *server) listBookings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+
+	data.BookingSection = query.Get("section")
+	data.BookingTab = query.Get("tab")
+	if data.BookingTab == "" && data.PeriodFilter == "" && data.StatusFilter == "" {
+		data.BookingTab = booking.ViewUpcoming
+	}
+	for _, tab := range []struct{ key, label string }{{booking.ViewUpcoming, "coming_soon"}, {booking.ViewInHouse, "staying_now"}, {booking.ViewEnded, "booking_ended"}, {booking.ViewCancelled, "cancelled"}} {
+		data.BookingTabs = append(data.BookingTabs, reservationTab{Key: tab.key, Label: tab.label, Selected: tab.key == data.BookingTab})
+	}
 	values, err := booking.List(r.Context(), s.database, booking.Filter{
-		UnitID: data.UnitFilter, Status: data.StatusFilter, Period: data.PeriodFilter, Today: today,
+		UnitID: data.UnitFilter, Status: data.StatusFilter, Period: data.PeriodFilter, View: data.BookingTab, Today: today,
 	})
 	if err != nil {
 		s.bookingResult(w, r, data, err)
 		return
 	}
 	data.BookingRows = bookingRows(values, data)
-	s.render(w, r, data, http.StatusOK)
+	for i := range data.BookingRows {
+		row := &data.BookingRows[i]
+		row.State, err = row.Booking.State(today)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		row.Initials, _ = person.Appearance(row.GuestName)
+	}
+	properties, err := property.List(r.Context(), s.database, true)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	for _, p := range properties {
+		units, err := property.ListUnits(r.Context(), s.database, p.ID, true)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		data.Units = append(data.Units, units...)
+	}
+	if err := s.propertyFeeds(r, &data); err != nil {
+		s.fail(w, err)
+		return
+	}
+	status := http.StatusOK
+	if data.Error != "" {
+		status = http.StatusBadRequest
+	}
+	s.render(w, r, data, status)
 }
 
 func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +191,7 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Page = "edit_booking"
+		data.BookingReadOnly = r.Method == http.MethodGet && !strings.HasSuffix(r.URL.Path, "/edit")
 		data.Cleaning, err = task.CleaningForBooking(r.Context(), s.database, id)
 		if err != nil {
 			s.fail(w, err)
@@ -156,6 +207,25 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		data.Booking.Kind, data.Booking.Channel, data.Booking.Status = booking.KindStay, booking.ChannelDirect, booking.StatusConfirmed
+	}
+	if data.BookingReadOnly {
+		today, err := settings.Today(r.Context(), s.database, s.now)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		data.BookingDetail = bookingRows([]booking.Booking{data.Booking}, data)[0]
+		data.BookingDetail.State, err = data.Booking.State(today)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		data.BookingDetail.Initials, _ = person.Appearance(data.BookingDetail.GuestName)
+		data.BookingDetail.Conflict, err = booking.HasConflict(r.Context(), s.database, data.Booking)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
 	}
 	if r.Method == http.MethodGet {
 		if data.Page == "new_booking" {

@@ -35,6 +35,7 @@ type todayPage struct {
 	ReservationTabs                                   []reservationTab
 	OverdueTotals                                     ledger.OverdueSummary
 	DueTasks                                          []task.Task
+	DueTaskLabels                                     map[int64]string
 	ProblemFeeds                                      []ical.ProblemFeed
 	YTD                                               ledger.YearReport
 	CurrentLeases                                     []currentLeaseCard
@@ -155,6 +156,27 @@ func (s *server) today(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.fail(w, err)
 		return
+	}
+	data.DueTaskLabels = make(map[int64]string)
+	for _, due := range data.DueTasks {
+		if due.Kind != task.KindCleaning {
+			continue
+		}
+		p, err := property.Get(ctx, s.database, due.PropertyID)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		label := p.Name
+		if due.UnitID != 0 {
+			u, err := property.GetUnit(ctx, s.database, due.UnitID)
+			if err != nil {
+				s.fail(w, err)
+				return
+			}
+			label += " · " + u.Name
+		}
+		data.DueTaskLabels[due.ID] = label
 	}
 	data.ProblemFeeds, err = ical.ProblemFeeds(ctx, s.database, now)
 	if err != nil {

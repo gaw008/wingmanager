@@ -42,10 +42,12 @@ const (
 
 // Filter selects bookings. Zero UnitID and empty Status or Period mean all.
 // A non-empty Period requires Today in the caller's configured time zone.
-// Check-out on Today counts as past; an ongoing stay counts as upcoming.
+// Legacy Period treats check-out today as past and ongoing stays as upcoming.
+// View uses State grouping and keeps checkout today in-house.
 type Filter struct {
 	UnitID         int64
 	Status, Period string
+	View           string
 	Today          civildate.Date
 }
 
@@ -209,7 +211,8 @@ func List(ctx context.Context, database *sql.DB, filter Filter) ([]Booking, erro
 	if filter.UnitID < 0 ||
 		(filter.Status != "" && !slices.Contains(Statuses(), filter.Status)) ||
 		(filter.Period != "" && filter.Period != PeriodUpcoming && filter.Period != PeriodPast) ||
-		(filter.Period != "" && filter.Today.IsZero()) {
+		((filter.Period != "" || filter.View != "") && filter.Today.IsZero()) ||
+		(filter.View != "" && !slices.Contains([]string{ViewUpcoming, ViewInHouse, ViewEnded, ViewCancelled}, filter.View)) {
 		return nil, ErrInvalid
 	}
 	records, err := New(database).listBookings(ctx)
@@ -231,7 +234,17 @@ func List(ctx context.Context, database *sql.DB, filter Filter) ([]Booking, erro
 				continue
 			}
 		}
-		values = append(values, fromRecord(record))
+		value := fromRecord(record)
+		if filter.View != "" {
+			state, err := value.State(filter.Today)
+			if err != nil {
+				return nil, err
+			}
+			if state.View != filter.View {
+				continue
+			}
+		}
+		values = append(values, value)
 	}
 	return values, nil
 }

@@ -27,9 +27,18 @@
     </details>{{end}}
   </div>
 </header>
-<main{{if and (ne .Page "today") (ne .Page "calendar")}} class="legacy-page"{{end}}>
-  {{if and (ne .Page "today") (ne .Page "calendar")}}<div class="page-head"><h1>{{t .Settings.Locale .Page}}</h1></div>{{end}}
-    {{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+<main>
+
+    {{if and .Error (ne .Page "login") (ne .Page "setup")}}<p class="notice danger" role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+    {{template "page_content" .}}
+</main>
+{{if .SignedIn}}
+<div class="modal" id="action-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1" hidden inert><div id="modal-content"></div></div>
+{{end}}
+{{template "overlays" .}}
+</body></html>{{end}}
+{{define "page_content"}}
+ {{if eq .Page "not_found"}}<div class="page-head"><h1>{{t .Settings.Locale "not_found"}}</h1><a class="btn" href="/">{{t .Settings.Locale "back"}}</a></div>{{end}}
     {{if eq .Page "today"}}{{template "today" .}}{{end}}
     {{if eq .Page "setup"}}{{template "setup" .}}{{end}}
     {{if eq .Page "login"}}{{template "login" .}}{{end}}
@@ -45,6 +54,8 @@
     {{if or (eq .Page "leases") (eq .Page "overdue")}}{{template "leases" .}}{{end}}
     {{if eq .Page "new_lease"}}{{template "new_lease" .}}{{end}}
     {{if eq .Page "lease_detail"}}{{template "lease_detail" .}}{{end}}
+    {{if eq .Page "lease_action"}}{{template "lease_action" .}}{{end}}
+    {{if eq .Page "void_entry"}}{{template "void_form" .}}{{end}}
     {{if eq .Page "money"}}{{template "money_entries" .}}{{end}}
     {{if or (eq .Page "add_expense") (eq .Page "add_income")}}{{template "money_form" .}}{{end}}
     {{if eq .Page "reports"}}{{template "money_report" .}}{{end}}
@@ -54,8 +65,10 @@
     {{if eq .Page "person_detail"}}{{template "person_detail" .}}{{end}}
     {{if eq .Page "money_detail"}}{{template "money_detail" .}}{{end}}
     {{if eq .Page "document_error"}}{{template "document_error" .}}{{end}}
-    {{if .DocumentPanel.UploadPath}}{{template "documents" .DocumentPanel}}{{end}}
-</main>
+    {{if and .DocumentPanel.UploadPath (ne .Page "lease_detail")}}{{template "documents" .DocumentPanel}}{{end}}
+{{end}}
+{{define "overlays"}}
+
 {{if .SignedIn}}
 <nav class="tabbar" aria-label="{{t .Settings.Locale "mobile_navigation"}}">{{template "nav_links" .}}</nav>
 <div class="scrim" id="scrim" data-close-overlay hidden></div>
@@ -64,13 +77,19 @@
   <div class="drawer-body" id="drawer-body"></div>
 </aside>
 {{end}}
-</body>
-</html>{{end}}
+{{end}}
 {{define "nav_links"}}
 {{range .Navigation}}<a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"/></svg>{{t $.Settings.Locale .Key}}</a>{{end}}
 {{end}}
 {{define "booking_drawer"}}
 {{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
-<h2>{{t .Settings.Locale .Page}}</h2>
-{{template "booking_form" .}}
+{{template "booking_content" .}}
+{{end}}
+
+{{define "modal_content"}}
+<div class="modal-head"><h2 id="modal-title">{{if eq .Page "lease_action"}}{{t .Settings.Locale .LeaseActionTitle}}{{else}}{{t .Settings.Locale .Page}}{{end}}</h2><button type="button" class="icon-btn" data-close-overlay aria-label="{{t .Settings.Locale "close"}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#x"/></svg></button></div>
+<div class="modal-body" hx-boost="true" hx-target="#modal-content" hx-swap="innerHTML">
+{{if .Error}}<p class="notice danger" role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+{{template "page_content" .}}
+</div>
 {{end}}

@@ -21,6 +21,7 @@ type taskPage struct {
 	TaskRows                []taskRow
 	TaskFilter              task.Filter
 	TaskKinds, TaskStatuses []string
+	TaskTabs                []navigationItem
 }
 
 func (s *server) registerTaskRoutes(mux *http.ServeMux) {
@@ -64,6 +65,17 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.TaskFilter = filter
+	for _, tab := range []struct{ key, status, due string }{
+		{"task_all", "", ""}, {"task_open", task.StatusOpen, ""},
+		{"task_overdue", task.StatusOpen, task.DueOverdue},
+		{"task_done", task.StatusDone, ""}, {"task_cancelled", task.StatusCancelled, ""},
+	} {
+		params := r.URL.Query()
+		params.Set("status", tab.status)
+		params.Set("due", tab.due)
+		selected := filter.Status == tab.status && filter.Due == tab.due
+		data.TaskTabs = append(data.TaskTabs, navigationItem{URL: "/tasks?" + params.Encode(), Key: tab.key, Current: selected})
+	}
 	values, err := task.List(r.Context(), s.database, filter)
 	if err != nil {
 		s.taskResult(w, r, data, err)

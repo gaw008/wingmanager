@@ -1,15 +1,7 @@
 {{define "settings"}}
-<form method="post" action="/settings">
-  <label for="landlord_name">{{t .Settings.Locale "landlord_name"}}</label>
-  <input id="landlord_name" name="landlord_name" value="{{.Settings.LandlordName}}" autocomplete="name">
-  <label for="timezone">{{t .Settings.Locale "timezone"}}</label>
-  <input id="timezone" name="timezone" value="{{.Settings.Timezone}}" required>
-  <label for="currency">{{t .Settings.Locale "currency"}}</label>
-  <input id="currency" name="currency" value="{{.Settings.Currency}}" required>
-  <label for="locale">{{t .Settings.Locale "locale"}}</label>
-  <select id="locale" name="locale">{{range .Locales}}
-    <option value="{{.}}" {{if eq . $.Settings.Locale}}selected{{end}}>{{.}}</option>
-  {{end}}</select>
-  <button type="submit">{{t .Settings.Locale "save"}}</button>
-</form>
+<div class="page-head"><div><h1>{{t .Settings.Locale "settings"}}</h1><p class="sub">{{t .Settings.Locale "settings_intro"}}</p></div></div>
+<form class="settings-stack form-panel" method="post" action="/settings">
+<section class="panel panel-pad"><div class="section-head"><h2>{{t .Settings.Locale "landlord_profile"}}</h2></div><label class="field" for="landlord_name"><span class="field-label">{{t .Settings.Locale "landlord_name"}}</span><input class="input" id="landlord_name" name="landlord_name" value="{{.Settings.LandlordName}}" autocomplete="name"></label></section>
+<section class="panel panel-pad"><div class="section-head"><h2>{{t .Settings.Locale "regional_settings"}}</h2></div><label class="field" for="timezone"><span class="field-label">{{t .Settings.Locale "timezone"}}</span><input class="input" id="timezone" name="timezone" value="{{.Settings.Timezone}}" required></label><p class="hint">{{t .Settings.Locale "timezone_hint"}}</p><div class="field-row"><label class="field" for="currency"><span class="field-label">{{t .Settings.Locale "currency"}}</span><input class="input" id="currency" name="currency" value="{{.Settings.Currency}}" required></label><label class="field" for="locale"><span class="field-label">{{t .Settings.Locale "locale"}}</span><select class="select" id="locale" name="locale">{{range .Locales}}<option value="{{.}}" {{if eq . $.Settings.Locale}}selected{{end}}>{{if eq . "zh-CN"}}中文{{else}}English{{end}}</option>{{end}}</select></label></div></section>
+<div class="form-actions"><button class="btn btn-primary" type="submit">{{t .Settings.Locale "save"}}</button></div></form>
 {{end}}

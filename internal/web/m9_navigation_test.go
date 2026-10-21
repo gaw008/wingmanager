@@ -86,7 +86,7 @@ func TestM9BookingDrawerAndFullPageFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{fmt.Sprintf("/bookings/%d", id), fmt.Sprintf("/bookings/new?unit=%d&date=2026-11-02", a.unitID)} {
+	for _, path := range []string{fmt.Sprintf("/bookings/%d/edit", id), fmt.Sprintf("/bookings/new?unit=%d&date=2026-11-02", a.unitID)} {
 		full := a.request(t, "GET", path, nil, 200, `<!doctype html>`, `<form method="post"`)
 		if !strings.Contains(full, `/static/app.css`) {
 			t.Fatal("full page missing layout")
@@ -109,7 +109,7 @@ func TestM9BookingDrawerAndFullPageFallback(t *testing.T) {
 		request.Header.Set("HX-Target", "drawer-body")
 		response = httptest.NewRecorder()
 		a.handler.ServeHTTP(response, request)
-		if response.Code != 303 || response.Header().Get("Location") != "/login" {
+		if response.Code != 200 || response.Header().Get("HX-Redirect") != "/login" {
 			t.Fatal("unauthenticated drawer")
 		}
 	}
