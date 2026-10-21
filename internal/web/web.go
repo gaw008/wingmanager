@@ -91,6 +91,7 @@ func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, c
 		"date":       displayDate,
 		"rentDueDay": rentDueDay,
 		"currency":   money.FormatCurrency,
+		"tn":         translateCount,
 		"syncError": func(locale, message string) string {
 			if message == ical.ErrEmptyFeed.Error() {
 				return catalogs[locale]["empty_feed_warning"]

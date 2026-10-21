@@ -38,9 +38,9 @@ func TestM5HTTPCreateActivateRentPaymentDepositVoidAndOverdue(t *testing.T) {
 			a.request(t, "POST", path+"/entries", url.Values{"kind": {"payment"}, "category": {"bank_transfer"}, "amount": {"1500.25"}, "occurred_on": {"2026-10-30"}}, 303)
 			a.request(t, "GET", path, nil, 200, `id="lease-balance">$1,499.75`)
 			// FIFO: August is paid, September partly paid, October remains wholly unpaid.
-			a.request(t, "GET", "/leases?filter=overdue", nil, 200, `data-lease-id="1"`, "$1,499.75", map[string]string{"zh-CN": "9月5日", "en": "Sep 5"}[locale], `56 `+catalogs[locale]["days_overdue"])
+			a.request(t, "GET", "/leases?filter=overdue", nil, 200, `data-lease-id="1"`, "$1,499.75", map[string]string{"zh-CN": "9月5日", "en": "Sep 5"}[locale], map[string]string{"zh-CN": "56 天逾期", "en": "56 days overdue"}[locale])
 			a.request(t, "POST", path+"/entries", url.Values{"kind": {"credit"}, "category": {"concession"}, "amount": {"499.75"}, "occurred_on": {"2026-10-31"}}, 303)
-			a.request(t, "GET", "/leases?filter=overdue", nil, 200, map[string]string{"zh-CN": "10月5日", "en": "Oct 5"}[locale], `26 `+catalogs[locale]["days_overdue"])
+			a.request(t, "GET", "/leases?filter=overdue", nil, 200, map[string]string{"zh-CN": "10月5日", "en": "Oct 5"}[locale], map[string]string{"zh-CN": "26 天逾期", "en": "26 days overdue"}[locale])
 			a.request(t, "POST", path+"/entries", url.Values{"kind": {"deposit_in"}, "category": {"deposit"}, "amount": {"2000.00"}, "occurred_on": {"2026-08-01"}}, 303)
 			a.request(t, "POST", path+"/apply-deposit", url.Values{"amount": {"1000.00"}, "occurred_on": {"2026-10-31"}, "memo": {"Deposit applied"}}, 303)
 			a.request(t, "GET", path, nil, 200, `id="lease-balance">$0.00`, `id="deposit-held">$1,000.00`)

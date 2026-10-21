@@ -17,7 +17,7 @@ import (
 
 type reservationCard struct {
 	booking.Reservation
-	Status, StatusClass, GuestLabel, Initials, Color string
+	StatusKey, StatusClass, GuestLabel, Initials, Color string
 }
 type reservationTab struct {
 	Key, Label string
@@ -29,18 +29,18 @@ type currentLeaseCard struct {
 	ledger.Summary
 }
 type todayPage struct {
-	TodayDate, Greeting, TodayHeading, ReservationTab string
-	Reservations                                      booking.Reservations
-	ReservationCards                                  []reservationCard
-	ReservationTabs                                   []reservationTab
-	OverdueTotals                                     ledger.OverdueSummary
-	DueTasks                                          []task.Task
-	DueTaskLabels                                     map[int64]string
-	ProblemFeeds                                      []ical.ProblemFeed
-	YTD                                               ledger.YearReport
-	CurrentLeases                                     []currentLeaseCard
-	VacantUnits                                       []property.VacantUnit
-	AttentionCount                                    int
+	TodayDate, Greeting, TodayDateLabel, ReservationTab string
+	Reservations                                        booking.Reservations
+	ReservationCards                                    []reservationCard
+	ReservationTabs                                     []reservationTab
+	OverdueTotals                                       ledger.OverdueSummary
+	DueTasks                                            []task.Task
+	DueTaskLabels                                       map[int64]string
+	ProblemFeeds                                        []ical.ProblemFeed
+	YTD                                                 ledger.YearReport
+	CurrentLeases                                       []currentLeaseCard
+	VacantUnits                                         []property.VacantUnit
+	AttentionCount                                      int
 }
 
 func (s *server) today(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +91,7 @@ func (s *server) today(w http.ResponseWriter, r *http.Request) {
 		dateLabel += local.Format(", Monday")
 	}
 
-	data.TodayHeading = fmt.Sprintf(catalogs[value.Locale]["today_summary"], dateLabel, data.Reservations.CheckInCount, data.Reservations.CheckOutCount)
+	data.TodayDateLabel = dateLabel
 	selected := r.URL.Query().Get("tab")
 	switch selected {
 	case "out", "in", "stay", "soon":
@@ -110,12 +110,12 @@ func (s *server) today(w http.ResponseWriter, r *http.Request) {
 		{"soon", "coming_soon", data.Reservations.Upcoming, data.Reservations.UpcomingCount},
 	}
 	for _, tab := range tabs {
-		data.ReservationTabs = append(data.ReservationTabs, reservationTab{Key: tab.key, Label: catalogs[value.Locale][tab.label], Count: tab.count, Selected: tab.key == selected})
+		data.ReservationTabs = append(data.ReservationTabs, reservationTab{Key: tab.key, Label: tab.label + "_count", Count: tab.count, Selected: tab.key == selected})
 		if tab.key != selected {
 			continue
 		}
 		for _, stay := range tab.list {
-			card := reservationCard{Reservation: stay, Status: catalogs[value.Locale][tab.label]}
+			card := reservationCard{Reservation: stay, StatusKey: tab.label}
 			switch selected {
 			case "out", "in":
 				card.StatusClass = selected
@@ -124,7 +124,7 @@ func (s *server) today(w http.ResponseWriter, r *http.Request) {
 				if stay.Departing {
 					key = "departs_in_days"
 				}
-				card.Status = fmt.Sprintf(catalogs[value.Locale][key], stay.EventDays)
+				card.StatusKey = key
 			}
 			card.GuestLabel = stay.GuestName
 			if card.GuestLabel == "" {

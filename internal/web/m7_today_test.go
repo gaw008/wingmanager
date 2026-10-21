@@ -143,7 +143,7 @@ func TestM7TodayAnswersLandlordQuestionsInConfiguredTimezone(t *testing.T) {
 			must(tx.Commit())
 
 			body := a.request(t, "GET", "/", nil, http.StatusOK,
-				`id="today-date" datetime="2026-10-31"`, "America/Los_Angeles", "Overdue tenant", "$750", "26 "+catalogs[locale]["days_overdue"],
+				`id="today-date" datetime="2026-10-31"`, "America/Los_Angeles", "Overdue tenant", "$750", map[string]string{"zh-CN": "26 天逾期", "en": "26 days overdue"}[locale],
 				"Overdue repair", "Due today repair", `id="ytd-net">$626.55`)
 			section := func(page, id string) string {
 				t.Helper()
@@ -197,7 +197,7 @@ func TestM7TodayAnswersLandlordQuestionsInConfiguredTimezone(t *testing.T) {
 					t.Fatal("healthy feed flagged")
 				}
 			}
-			for _, want := range []string{`id="check-in-count">2`, `id="check-out-count">1`, `id="overdue-total">$750`, `1 ` + catalogs[locale]["overdue_count"] + ` · ` + catalogs[locale]["longest"] + ` 26 ` + catalogs[locale]["days"], `data-current-lease-id="` + fmt.Sprint(leaseID) + `"`, `$2,000`, `id="todo-count">10`} {
+			for _, want := range []string{`id="check-in-count">2`, `id="check-out-count">1`, `id="overdue-total">$750`, map[string]string{"zh-CN": "1 份租约 · 最长 26 天", "en": "1 lease · Longest 26 days"}[locale], `data-current-lease-id="` + fmt.Sprint(leaseID) + `"`, `$2,000`, `id="todo-count">10`} {
 				if !strings.Contains(body, want) {
 					t.Fatalf("missing Today summary %s", want)
 				}
