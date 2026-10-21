@@ -1,32 +1,26 @@
 {{define "documents"}}
-<section aria-label="{{t .Locale "documents"}}">
-<h2>{{t .Locale "documents"}}</h2>
-<ul>{{range .Documents}}
-<li data-document-id="{{.ID}}"><a href="/documents/{{.ID}}">{{.Filename}}</a> · {{.SizeBytes}} {{t $.Locale "bytes"}} · {{.UploadedAt}}
-<form method="post" action="/documents/{{.ID}}/delete"><button class="outline" type="submit">{{t $.Locale "delete_document"}}</button></form></li>
-{{else}}<li>{{t .Locale "no_documents"}}</li>{{end}}</ul>
-<form method="post" enctype="multipart/form-data" action="{{.UploadPath}}">
-<label>{{t .Locale "upload_document"}}<input type="file" name="file" required></label>
-<small>{{t .Locale "document_limit"}}</small><button type="submit">{{t .Locale "upload_document"}}</button>
-</form>
+<section class="panel panel-pad documents" aria-label="{{t .Locale "documents"}}"><h3>{{t .Locale "documents"}}</h3>
+{{range .Documents}}<div class="file" data-document-id="{{.ID}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#doc"/></svg><div class="row-body"><a class="link" href="/documents/{{.ID}}">{{.Filename}}</a><div class="meta">{{tn $.Locale "bytes" .SizeBytes}} · {{.UploadedAt}}</div></div><form method="post" action="/documents/{{.ID}}/delete"><button class="btn btn-sm btn-ghost" type="submit">{{t $.Locale "delete_document"}}</button></form></div>
+{{else}}<div class="empty empty-compact"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#doc"/></svg><p>{{t .Locale "no_documents"}}</p><a class="btn btn-sm" href="#document-upload">{{t .Locale "upload_document"}}</a></div>{{end}}
+<form id="document-upload" class="document-upload" method="post" enctype="multipart/form-data" action="{{.UploadPath}}"><label class="field"><span class="field-label">{{t .Locale "upload_document"}}</span><input class="input" type="file" name="file" required></label><p class="hint">{{t .Locale "document_limit"}}</p><button class="btn btn-sm" type="submit">{{t .Locale "upload_document"}}</button></form>
 </section>
 {{end}}
-
 {{define "unit_detail"}}
-<h2>{{.Unit.Name}}</h2><p><a href="/properties/{{.Property.ID}}">{{.Property.Name}}</a>{{if .Unit.ArchivedAt}} · {{t .Settings.Locale "archived"}}{{end}}</p>
+<div class="page-head"><h1>{{.Unit.Name}}</h1></div><p><a href="/properties/{{.Property.ID}}">{{.Property.Name}}</a>{{if .Unit.ArchivedAt}} · {{t .Settings.Locale "archived"}}{{end}}</p>
 {{end}}
 
 {{define "person_detail"}}
-<h2>{{.Person.Name}}</h2><p>{{.Person.Email}} · {{.Person.Phone}}</p><p>{{.Person.Notes}}</p>
-<p><a href="/people/{{.Person.ID}}/edit">{{t .Settings.Locale "edit"}}</a></p>
+<div class="page-head"><h1>{{.Person.Name}}</h1></div><p>{{.Person.Email}} · {{.Person.Phone}}</p><p>{{.Person.Notes}}</p>
+<p><a class="btn" href="/people/{{.Person.ID}}/edit">{{t .Settings.Locale "edit"}}</a></p>
 {{end}}
 
 {{define "money_detail"}}
+<div class="crumbs"><a href="/money">{{t .Settings.Locale "nav_money"}}</a><span>›</span>#{{.MoneyEntry.ID}}</div><div class="page-head"><h1>{{t .Settings.Locale "money_detail"}}</h1></div>
 <p>#{{.MoneyEntry.ID}} · <a href="/properties/{{.Property.ID}}">{{.Property.Name}}</a></p>
-<dl><dt>{{t .Settings.Locale "entry_kind"}}</dt><dd>{{t .Settings.Locale .MoneyEntry.Kind}}</dd>
+<dl class="kv panel panel-pad"><dt>{{t .Settings.Locale "entry_kind"}}</dt><dd>{{t .Settings.Locale .MoneyEntry.Kind}}</dd>
 <dt>{{t .Settings.Locale "category"}}</dt><dd>{{t .Settings.Locale .MoneyEntry.Category}}</dd>
-<dt>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})</dt><dd>{{money .MoneyEntry.AmountCents}}</dd>
-<dt>{{t .Settings.Locale "occurred_on"}}</dt><dd>{{.MoneyEntry.OccurredOn}}</dd>
+<dt>{{t .Settings.Locale "amount"}} ({{.Settings.Currency}})</dt><dd>{{currency $.Settings.Currency .MoneyEntry.AmountCents}}</dd>
+<dt>{{t .Settings.Locale "occurred_on"}}</dt><dd>{{date $.Settings.Locale $.DisplayYear .MoneyEntry.OccurredOn}}</dd>
 <dt>{{t .Settings.Locale "notes"}}</dt><dd>{{.MoneyEntry.Memo}}</dd></dl>
 {{if .MoneyEntry.VoidedAt}}<p>{{t .Settings.Locale "voided"}}: {{.MoneyEntry.VoidReason}}</p>{{end}}
 {{if .MoneyEntry.LeaseID}}<p><a href="/leases/{{.MoneyEntry.LeaseID}}">{{t .Settings.Locale "lease"}} #{{.MoneyEntry.LeaseID}}</a></p>{{end}}
@@ -34,5 +28,11 @@
 {{end}}
 
 {{define "document_error"}}
+<div class="page-head"><h1>{{t .Settings.Locale "document_error"}}</h1></div>
 {{if .DocumentBack}}<p><a href="{{.DocumentBack}}">{{t .Settings.Locale "back"}}</a></p>{{end}}
+{{end}}
+
+{{define "void_form"}}
+{{if not .Modal}}<div class="page-head"><h1>{{t .Settings.Locale "void_entry"}}</h1></div>{{end}}
+<form class="form-panel" method="post" action="{{.FormAction}}"><p>{{t .Settings.Locale .MoneyEntry.Kind}} · {{currency $.Settings.Currency .MoneyEntry.AmountCents}} · {{date $.Settings.Locale $.DisplayYear .MoneyEntry.OccurredOn}}</p><label class="field"><span class="field-label">{{t .Settings.Locale "void_reason"}}</span><input class="input" name="reason" value="{{.FormValues.Get "reason"}}" required></label><div class="form-actions">{{if .Modal}}<button class="btn btn-ghost" type="button" data-close-overlay>{{t .Settings.Locale "cancel"}}</button>{{else}}<a class="btn btn-ghost" href="/money">{{t .Settings.Locale "cancel"}}</a>{{end}}<button class="btn btn-primary">{{t .Settings.Locale "void_entry"}}</button></div></form>
 {{end}}

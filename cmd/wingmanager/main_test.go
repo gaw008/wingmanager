@@ -97,10 +97,17 @@ func TestCommandsSeedBackupReset(t *testing.T) {
 	if today.Code != http.StatusOK {
 		t.Fatalf("Today status: %d", today.Code)
 	}
-	for _, want := range []string{"Demo arriving guest", "Demo departing guest", "Demo overdue tenant", `id="ytd-net">625.00`} {
+	for _, want := range []string{"Demo departing guest", "Demo overdue tenant", `id="ytd-net">$625`} {
 		if !strings.Contains(today.Body.String(), want) {
 			t.Fatalf("Today missing %s", want)
 		}
+	}
+	request = httptest.NewRequest(http.MethodGet, "/?tab=in", nil)
+	request.AddCookie(login.Result().Cookies()[0])
+	arrivals := httptest.NewRecorder()
+	handler.ServeHTTP(arrivals, request)
+	if arrivals.Code != http.StatusOK || !strings.Contains(arrivals.Body.String(), "Demo arriving guest") || strings.Contains(arrivals.Body.String(), "Demo departing guest") {
+		t.Fatalf("Today arrivals tab: %d %s", arrivals.Code, arrivals.Body)
 	}
 	service := auth.NewService(database)
 	token, _, err := service.Login(t.Context(), email, password)

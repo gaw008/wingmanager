@@ -286,3 +286,43 @@ func (q *Queries) updateProperty(ctx context.Context, arg updatePropertyParams) 
 	}
 	return result.RowsAffected()
 }
+
+const vacantUnits = `-- name: vacantUnits :many
+SELECT u.id, p.name AS property_name, u.name AS unit_name
+FROM units u JOIN properties p ON p.id = u.property_id
+WHERE u.archived_at IS NULL AND p.archived_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM leases l WHERE l.unit_id = u.id AND l.status = 'active'
+      AND l.starts_on <= ?1 AND (l.ends_on IS NULL OR l.ends_on >= ?1))
+  AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.unit_id = u.id AND b.status = 'confirmed'
+      AND b.check_in <= ?1 AND b.check_out > ?1)
+ORDER BY p.name, p.id, u.name, u.id
+`
+
+type vacantUnitsRow struct {
+	ID           int64
+	PropertyName string
+	UnitName     string
+}
+
+func (q *Queries) vacantUnits(ctx context.Context, today string) ([]vacantUnitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, vacantUnits, today)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []vacantUnitsRow
+	for rows.Next() {
+		var i vacantUnitsRow
+		if err := rows.Scan(&i.ID, &i.PropertyName, &i.UnitName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

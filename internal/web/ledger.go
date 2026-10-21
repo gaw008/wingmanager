@@ -32,7 +32,8 @@ func (s *server) registerMoneyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /money/income", s.addMoney)
 	mux.HandleFunc("POST /money/income", s.addMoney)
 	mux.HandleFunc("POST /money/{id}/void", s.voidMoney)
-	mux.HandleFunc("GET /reports", s.reportMoney)
+	mux.HandleFunc("GET /money/{id}/void", s.voidMoneyForm)
+	mux.HandleFunc("GET /reports", redirectView("/money", "tab", "reports"))
 	mux.HandleFunc("GET /reports/schedule-e.csv", s.reportMoney)
 	mux.HandleFunc("GET /reports/ledger.csv", s.reportMoney)
 }
@@ -59,6 +60,10 @@ func (s *server) moneyFilters(r *http.Request) (ledger.Filter, error) {
 }
 
 func (s *server) listMoney(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("tab") == "reports" {
+		s.reportMoney(w, r)
+		return
+	}
 	data := pageData{Page: "money"}
 	var err error
 	data.MoneyKinds = ledger.Kinds()
@@ -140,12 +145,18 @@ func (s *server) voidMoney(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r)
 		return
 	}
+	data := pageData{Page: "void_entry", FormAction: r.URL.RequestURI()}
+	data.MoneyEntry, err = ledger.Get(r.Context(), s.database, id)
+	if err != nil {
+		s.moneyResult(w, r, data, err)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
-		s.moneyResult(w, r, pageData{Page: "money"}, ledger.ErrInvalid)
+		s.moneyResult(w, r, data, ledger.ErrInvalid)
 		return
 	}
 	if err := ledger.Void(r.Context(), s.database, id, r.PostForm.Get("reason")); err != nil {
-		s.moneyResult(w, r, pageData{Page: "money"}, err)
+		s.moneyResult(w, r, data, err)
 		return
 	}
 	http.Redirect(w, r, "/money?"+r.URL.RawQuery, http.StatusSeeOther)
@@ -165,7 +176,7 @@ func (s *server) reportMoney(w http.ResponseWriter, r *http.Request) {
 		s.moneyResult(w, r, data, err)
 		return
 	}
-	if r.URL.Path == "/reports" {
+	if r.URL.Path == "/money" {
 		s.render(w, r, data, http.StatusOK)
 		return
 	}
@@ -204,4 +215,27 @@ func (s *server) moneyResult(w http.ResponseWriter, r *http.Request, data pageDa
 	default:
 		s.fail(w, err)
 	}
+}
+
+func (s *server) voidMoneyForm(w http.ResponseWriter, r *http.Request) {
+	raw := r.PathValue("id")
+	if r.PathValue("entry") != "" {
+		raw = r.PathValue("entry")
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		s.notFound(w, r)
+		return
+	}
+	data := pageData{Page: "void_entry", FormAction: r.URL.RequestURI()}
+	data.MoneyEntry, err = ledger.Get(r.Context(), s.database, id)
+	if err != nil {
+		s.moneyResult(w, r, data, err)
+		return
+	}
+	if r.PathValue("entry") != "" && fmt.Sprint(data.MoneyEntry.LeaseID) != r.PathValue("id") {
+		s.notFound(w, r)
+		return
+	}
+	s.render(w, r, data, http.StatusOK)
 }

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 
 	"github.com/gaw008/wingmanager/internal/lease"
@@ -23,33 +25,40 @@ type entryForm struct {
 	Categories []string
 }
 type leasePage struct {
-	Lease                 lease.Lease
-	LeaseRows             []leaseRow
-	LeaseStatuses         []string
-	LeaseStatusFilter     string
-	Tenants               []person.Person
-	Entries, RentSchedule []ledger.Entry
-	Balance               ledger.Summary
-	EntryForms            []entryForm
-	Today                 string
+	LeaseLabel, LedgerFilter, LeaseAction, LeaseActionTitle, EntryKind string
+	EntryCategories                                                    []string
+	LedgerRows                                                         []ledger.BalancedEntry
+	RentPeriods                                                        []ledger.RentPeriod
+	PaymentPreview                                                     ledger.PaymentPreview
+	PreviewInvalid                                                     bool
+	Lease                                                              lease.Lease
+	LeaseRows                                                          []leaseRow
+	LeaseStatusFilter                                                  string
+	Tenants                                                            []person.Person
+	Entries                                                            []ledger.Entry
+	Balance                                                            ledger.Summary
+	EntryForms                                                         []entryForm
+	Today                                                              string
 }
 
 func (s *server) registerLeaseRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /leases", s.listLeases)
-	mux.HandleFunc("GET /overdue", s.listLeases)
+	mux.HandleFunc("GET /overdue", redirectView("/leases", "filter", "overdue"))
 	mux.HandleFunc("GET /leases/new", s.editLease)
 	mux.HandleFunc("POST /leases/new", s.editLease)
 	mux.HandleFunc("GET /leases/{id}", s.editLease)
+	mux.HandleFunc("GET /leases/{id}/payment-preview", s.paymentPreview)
+	mux.HandleFunc("GET /leases/{id}/{action}", s.leaseForm)
+	mux.HandleFunc("GET /leases/{id}/entries/{entry}/void", s.voidMoneyForm)
 	mux.HandleFunc("POST /leases/{id}/{action}", s.leaseAction)
 	mux.HandleFunc("POST /leases/{id}/entries/{entry}/void", s.voidLeaseEntry)
 }
 func (s *server) listLeases(w http.ResponseWriter, r *http.Request) {
 	data := pageData{Page: "leases"}
-	if r.URL.Path == "/overdue" {
+	if r.URL.Query().Get("filter") == "overdue" {
 		data.Page = "overdue"
 	}
 	data.LeaseStatusFilter = r.URL.Query().Get("status")
-	data.LeaseStatuses = lease.Statuses()
 	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
 		s.fail(w, err)
 		return
@@ -74,7 +83,7 @@ func (s *server) listLeases(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, err)
 			return
 		}
-		if data.Page == "overdue" && summary.DaysOverdue == 0 {
+		if data.Page == "overdue" && (summary.DaysOverdue == 0 || v.Status == lease.StatusDraft) {
 			continue
 		}
 		tenants, err := lease.Tenants(r.Context(), s.database, v.ID)
@@ -107,23 +116,30 @@ func (s *server) loadLeasePage(r *http.Request, id int64) (pageData, error) {
 	if err != nil {
 		return data, err
 	}
-	data.Entries, err = ledger.List(r.Context(), s.database, id)
-	if err != nil {
-		return data, err
-	}
-	for _, e := range data.Entries {
-		if e.Period != "" {
-			data.RentSchedule = append(data.RentSchedule, e)
-		}
-	}
 	today, err := settings.Today(r.Context(), s.database, s.now)
 	if err != nil {
 		return data, err
 	}
 	data.Today = today.String()
-	data.Balance, err = ledger.Balance(r.Context(), s.database, id, today)
+	projection, err := ledger.Project(r.Context(), s.database, data.Lease, today)
 	if err != nil {
 		return data, err
+	}
+	data.Balance = projection.Summary
+	data.RentPeriods = projection.Periods
+	data.LedgerFilter = r.URL.Query().Get("ledger")
+	for _, row := range projection.Entries {
+		data.Entries = append(data.Entries, row.Entry)
+		if data.LedgerFilter == "" || data.LedgerFilter == row.Kind || (data.LedgerFilter == "deposit" && (row.Kind == ledger.KindDepositIn || row.Kind == ledger.KindDepositOut)) {
+			data.LedgerRows = append(data.LedgerRows, row)
+		}
+	}
+	slices.Reverse(data.LedgerRows)
+	for _, u := range data.UnitChoices {
+		if u.ID == data.Lease.UnitID {
+			data.LeaseLabel = u.Label
+			break
+		}
 	}
 	for _, kind := range ledger.LeaseKinds() {
 		data.EntryForms = append(data.EntryForms, entryForm{kind, ledger.Categories(kind)})
@@ -201,6 +217,12 @@ func (s *server) leaseAction(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.leaseResult(w, r, data, lease.ErrInvalid)
 		return
+	}
+	if r.PathValue("action") != "activate" && r.PathValue("action") != "remove-tenant" {
+		if !prepareLeaseAction(r, &data) {
+			s.notFound(w, r)
+			return
+		}
 	}
 	today, err := settings.Today(r.Context(), s.database, s.now)
 	if err != nil {
@@ -296,6 +318,13 @@ func (s *server) voidLeaseEntry(w http.ResponseWriter, r *http.Request) {
 		s.leaseResult(w, r, data, ledger.ErrInvalid)
 		return
 	}
+	data.Page = "void_entry"
+	data.FormAction = r.URL.Path
+	data.MoneyEntry, err = ledger.Get(r.Context(), s.database, entryID)
+	if err != nil {
+		s.leaseResult(w, r, data, err)
+		return
+	}
 	err = ledger.Void(r.Context(), s.database, entryID, r.PostForm.Get("reason"))
 	if err != nil {
 		s.leaseResult(w, r, data, err)
@@ -307,8 +336,7 @@ func (s *server) leaseResult(w http.ResponseWriter, r *http.Request, data pageDa
 	status := http.StatusBadRequest
 	switch {
 	case err == nil:
-		s.render(w, r, data, http.StatusOK)
-		return
+		status = http.StatusOK
 	case errors.Is(err, lease.ErrNotFound), errors.Is(err, ledger.ErrNotFound):
 		s.notFound(w, r)
 		return
@@ -327,5 +355,98 @@ func (s *server) leaseResult(w http.ResponseWriter, r *http.Request, data pageDa
 		s.fail(w, err)
 		return
 	}
+	if data.Page == "lease_action" && data.EntryKind == ledger.KindPayment {
+		if data.FormValues == nil {
+			data.FormValues = r.PostForm
+		}
+		if err := s.loadPaymentPreview(r, &data, data.FormValues.Get("amount")); err != nil {
+			s.fail(w, err)
+			return
+		}
+	}
 	s.render(w, r, data, status)
+}
+
+// prepareLeaseAction selects the same form for enhanced requests and ordinary links.
+func prepareLeaseAction(r *http.Request, data *pageData) bool {
+	action := r.PathValue("action")
+	data.LeaseAction, data.LeaseActionTitle = action, action
+	switch action {
+	case "entries":
+		kind := r.FormValue("kind")
+		if !slices.Contains(ledger.LeaseKinds(), kind) {
+			return false
+		}
+		data.EntryKind, data.EntryCategories = kind, ledger.Categories(kind)
+		data.LeaseActionTitle = kind
+		if kind == ledger.KindPayment || kind == ledger.KindCharge || kind == ledger.KindCredit {
+			data.LeaseActionTitle = "record_" + kind
+		}
+	case "apply-deposit":
+		data.LeaseActionTitle = "apply_deposit"
+	case "edit":
+		data.LeaseActionTitle = "change_rent"
+	case "tenants":
+		data.LeaseActionTitle = "add_tenant"
+	case "end":
+		data.LeaseActionTitle = "end_lease"
+	default:
+		return false
+	}
+	data.Page = "lease_action"
+	data.FormAction = fmt.Sprintf("/leases/%d/%s", data.Lease.ID, action)
+	return true
+}
+
+func (s *server) leaseForm(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.notFound(w, r)
+		return
+	}
+	data, err := s.loadLeasePage(r, id)
+	if err != nil {
+		s.leaseResult(w, r, data, err)
+		return
+	}
+	if !prepareLeaseAction(r, &data) {
+		s.notFound(w, r)
+		return
+	}
+	if data.EntryKind == ledger.KindPayment {
+		data.FormValues = url.Values{"amount": {money.Format(max(data.Balance.BalanceCents, 0))}}
+	}
+	s.leaseResult(w, r, data, nil)
+}
+
+func (s *server) paymentPreview(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.notFound(w, r)
+		return
+	}
+	if _, err := lease.Get(r.Context(), s.database, id); err != nil {
+		s.leaseResult(w, r, pageData{}, err)
+		return
+	}
+	data := pageData{Page: "payment_preview"}
+	data.Lease.ID = id
+	if err := s.loadPaymentPreview(r, &data, r.URL.Query().Get("amount")); err != nil {
+		s.fail(w, err)
+		return
+	}
+	s.render(w, r, data, http.StatusOK)
+}
+
+// loadPaymentPreview shares parsing and allocation between initial forms and edits.
+func (s *server) loadPaymentPreview(r *http.Request, data *pageData, raw string) error {
+	amount, err := money.Parse(raw)
+	if err == nil {
+		data.PaymentPreview, err = ledger.PreviewPayment(r.Context(), s.database, data.Lease.ID, amount)
+	}
+	if errors.Is(err, money.ErrAmount) || errors.Is(err, ledger.ErrInvalid) {
+		data.PreviewInvalid = true
+		return nil
+	}
+	return err
 }

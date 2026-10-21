@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>今天 · wingmanager（原型）</title>
+<link rel="stylesheet" href="base.css">
+<style>
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.card { display: flex; flex-direction: column; justify-content: space-between; gap: 18px; min-height: 172px; padding: 20px; border: 1px solid var(--border-soft); border-radius: var(--radius); transition: box-shadow .2s; }
+.card:hover { box-shadow: var(--shadow-hover); }
+.card-top { display: flex; justify-content: space-between; gap: 12px; }
+.status { font-size: 14px; font-weight: 600; }
+.status.out { color: var(--accent); }
+.status.in { color: var(--success); }
+.guest { margin-top: 4px; font-size: 18px; font-weight: 600; }
+.card .avatar { width: 48px; height: 48px; font-size: 16px; }
+.card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border-soft); font-size: 14px; }
+.unit { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.unit-thumb { flex: none; width: 28px; height: 28px; border-radius: 6px; background: #cfe3d4; }
+.unit span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cards .empty { grid-column: 1 / -1; }
+.split { display: grid; grid-template-columns: 1.4fr 1fr; gap: 32px; align-items: start; }
+.row.done { opacity: .45; }
+.row.done .row-title { text-decoration: line-through; }
+.row-title .badge { margin-left: 6px; vertical-align: 2px; }
+.lease { display: block; padding: 20px; margin-bottom: 16px; transition: box-shadow .2s; }
+.lease:hover { box-shadow: var(--shadow); }
+.lease-head { display: flex; justify-content: space-between; gap: 12px; }
+.lease-name { font-weight: 600; font-size: 16px; }
+.progress { height: 6px; border-radius: 3px; background: var(--surface-muted); overflow: hidden; margin: 16px 0 8px; }
+.progress span { display: block; height: 100%; background: var(--danger); }
+.lease-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; font-size: 13px; color: var(--text-muted); }
+.lease-grid b { display: block; color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
+@media (max-width: 960px) { .cards { grid-template-columns: repeat(2, 1fr); } .split { grid-template-columns: 1fr; } }
+@media (max-width: 743px) {
+  .page-head .btn { display: none; }
+  .cards { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 0 16px 8px; scrollbar-width: none; }
+  .card { flex: 0 0 82%; scroll-snap-align: start; }
+  .cards .empty { flex: 1 0 100%; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="today.html"><svg class="icon"><use href="icons.svg#logo"/></svg>wingmanager</a>
+    <nav class="nav" aria-label="主导航">
+      <a href="today.html" aria-current="page">今天</a>
+      <a href="calendar.html">日历</a>
+      <a href="#">短租</a>
+      <a href="lease.html">长租</a>
+      <a href="#">账本</a>
+    </nav>
+    <a class="account" href="#" title="设置、房产、联系人"><svg class="icon"><use href="icons.svg#menu"/></svg><span class="avatar">房</span></a>
+  </div>
+</header>
+
+<main>
+  <div class="page-head">
+    <div>
+      <h1>下午好，房东</h1>
+      <p class="sub">10 月 20 日 星期二 · 今天有 1 位入住、1 位退房</p>
+    </div>
+    <a class="btn" href="calendar.html"><svg class="icon"><use href="icons.svg#plus"/></svg>新建订单</a>
+  </div>
+
+  <div class="stats">
+    <a class="stat" href="#"><div class="stat-label"><span class="dot" style="background:var(--success)"></span>今天入住</div><div class="stat-value">1</div><div class="stat-note">湖边小屋</div></a>
+    <a class="stat" href="#"><div class="stat-label"><span class="dot" style="background:var(--accent)"></span>今天退房</div><div class="stat-value">1</div><div class="stat-note">保洁已安排 · 今天</div></a>
+    <a class="stat is-danger" href="lease.html"><div class="stat-label"><span class="dot" style="background:var(--danger)"></span>逾期租金</div><div class="stat-value">$3,375</div><div class="stat-note">1 位租客 · 最长 49 天</div></a>
+    <a class="stat is-success" href="#"><div class="stat-label"><span class="dot" style="background:var(--text)"></span>今年净收入</div><div class="stat-value">$8,640</div><div class="stat-note">现金制 · 截至今天</div></a>
+  </div>
+
+  <section>
+    <div class="section-head"><h2>你的预订</h2><a class="link" href="calendar.html">在日历中查看</a></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-tab="out">今天退房（1）</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="in">今天入住（1）</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="stay">入住中（0）</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="soon">即将到来（3）</button>
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <div class="split">
+    <section>
+      <div class="section-head"><h2>需要处理</h2><span class="meta" id="todo-count">3 项</span></div>
+      <div class="list">
+        <div class="row">
+          <div class="row-icon danger"><svg class="icon"><use href="icons.svg#alert"/></svg></div>
+          <div class="row-body"><div class="row-title">刘一鸣 欠租 $3,375 <span class="badge danger">逾期 49 天</span></div><div class="row-sub">市区公寓 · A 室 · 9 月房租未付清</div></div>
+          <a class="btn btn-sm" href="lease.html">记一笔收款</a>
+        </div>
+        <div class="row" id="task-row">
+          <div class="row-icon"><svg class="icon"><use href="icons.svg#broom"/></svg></div>
+          <div class="row-body"><div class="row-title">湖边小屋 退房保洁</div><div class="row-sub">今天 · 负责人：阿芳</div></div>
+          <button class="btn btn-sm" id="task-done"><svg class="icon"><use href="icons.svg#check"/></svg><span>完成</span></button>
+        </div>
+        <div class="row">
+          <div class="row-icon warn"><svg class="icon"><use href="icons.svg#sync"/></svg></div>
+          <div class="row-body"><div class="row-title">VRBO 日历同步失败</div><div class="row-sub">湖边小屋 · 后院 ADU · 超过 24 小时未同步，订单数据未被改动</div>
+            <details class="err"><summary>技术详情</summary><code>calendar HTTP status 404</code></details></div>
+          <a class="btn btn-sm" href="#">检查链接</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>长租</h2><a class="link" href="lease.html">全部租约</a></div>
+      <a class="lease panel" href="lease.html">
+        <div class="lease-head"><div><div class="lease-name">市区公寓 · A 室</div><div class="meta">刘一鸣 · 2026-08-01 起 · 按月续租</div></div><span class="badge danger" style="align-self:flex-start">逾期</span></div>
+        <div class="progress" title="欠款相当于 1.5 个月房租"><span style="width:100%"></span></div>
+        <div class="lease-grid"><div>月租<b>$2,250</b></div><div>欠款<b style="color:var(--danger)">$3,375</b></div><div>押金持有<b>$2,250</b></div></div>
+      </a>
+      <div class="empty" style="padding:24px"><strong>市区公寓 · B 室 空着</strong>新建一份租约，房租会按月自动生成。<div style="margin-top:12px"><a class="btn btn-sm" href="#"><svg class="icon"><use href="icons.svg#plus"/></svg>新建租约</a></div></div>
+    </section>
+  </div>
+</main>
+
+<nav class="tabbar" aria-label="主导航（手机）">
+  <a href="today.html" aria-current="page"><svg class="icon"><use href="icons.svg#sun"/></svg>今天</a>
+  <a href="calendar.html"><svg class="icon"><use href="icons.svg#cal"/></svg>日历</a>
+  <a href="#"><svg class="icon"><use href="icons.svg#bed"/></svg>短租</a>
+  <a href="lease.html"><svg class="icon"><use href="icons.svg#key"/></svg>长租</a>
+  <a href="#"><svg class="icon"><use href="icons.svg#wallet"/></svg>账本</a>
+</nav>
+
+<script>
+// 原型假数据；正式实现由服务端渲染，标签切换用链接或 htmx。
+const reservations = {
+  out: [{ status: "今天退房", cls: "out", guest: "Emily Chen", initials: "EC", color: "#f3a6b4", dates: "10月17日 – 20日 · 3 晚", unit: "湖边小屋 · 整套", channel: "Airbnb", chip: "airbnb" }],
+  in: [{ status: "今天入住", cls: "in", guest: "王小明", initials: "王", color: "#9cc7f2", dates: "10月20日 – 23日 · 3 晚", unit: "湖边小屋 · 整套", channel: "直订", chip: "direct" }],
+  stay: [],
+  soon: [
+    { status: "3 天后退房", cls: "", guest: "王小明", initials: "王", color: "#9cc7f2", dates: "10月20日 – 23日 · 3 晚", unit: "湖边小屋 · 整套", channel: "直订", chip: "direct" },
+    { status: "5 天后入住", cls: "", guest: "Sarah Johnson", initials: "SJ", color: "#f6c98b", dates: "10月25日 – 27日 · 2 晚", unit: "湖边小屋 · 整套", channel: "VRBO", chip: "vrbo" },
+    { status: "8 天后入住", cls: "", guest: "Daniel Park", initials: "DP", color: "#c9b6f2", dates: "10月28日 – 11月1日 · 4 晚", unit: "湖边小屋 · 后院 ADU", channel: "Airbnb", chip: "airbnb" },
+  ],
+};
+const empty = { stay: "<strong>现在没有入住中的客人</strong>客人入住后会出现在这里。" };
+function render(tab) {
+  const list = reservations[tab];
+  document.getElementById("cards").innerHTML = list.length ? list.map(r => `
+    <a class="card" href="calendar.html">
+      <div class="card-top">
+        <div><div class="status ${r.cls}">${r.status}</div><div class="guest">${r.guest}</div><div class="meta">${r.dates}</div></div>
+        <span class="avatar" style="background:${r.color};color:#222">${r.initials}</span>
+      </div>
+      <div class="card-foot"><span class="unit"><span class="unit-thumb"></span><span>${r.unit}</span></span><span class="chip ${r.chip}">${r.channel}</span></div>
+    </a>`).join("") : `<div class="empty">${empty[tab]}</div>`;
+}
+document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", b === btn));
+  render(btn.dataset.tab);
+}));
+document.getElementById("task-done").addEventListener("click", e => {
+  const row = document.getElementById("task-row");
+  const done = row.classList.toggle("done");
+  e.currentTarget.querySelector("span").textContent = done ? "撤销" : "完成";
+  document.getElementById("todo-count").textContent = done ? "2 项" : "3 项";
+});
+render("out");
+</script>
+</body>
+</html>

@@ -41,8 +41,8 @@ func TestM4FeedUIImportCalendarOwnerFieldsAndPublicExport(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			propertyPath := fmt.Sprintf("/properties/%d", unit.PropertyID)
-			a.request(t, "GET", propertyPath, nil, 200, catalogs[locale]["feeds"], catalogs[locale]["never_synced"], catalogs[locale]["remove_feed_hint"], `data-copy-target=`, `/ical/`+unit.IcalExportToken+`.ics`, feedPath+"/edit")
+			propertyPath := "/bookings?section=sync"
+			a.request(t, "GET", propertyPath, nil, 200, catalogs[locale]["booking_sync"], catalogs[locale]["never_synced"], catalogs[locale]["remove_feed_hint"], `data-copy-target=`, `/ical/`+unit.IcalExportToken+`.ics`, feedPath+"/edit")
 			a.request(t, "POST", feedPath+"/sync", nil, 303)
 			a.request(t, "GET", propertyPath, nil, 200, `<time>`, catalogs[locale]["sync_now"])
 			values, err := booking.List(t.Context(), a.database, booking.Filter{})
@@ -60,7 +60,8 @@ func TestM4FeedUIImportCalendarOwnerFieldsAndPublicExport(t *testing.T) {
 			}
 			bPath := fmt.Sprintf("/bookings/%d", imported.ID)
 			a.request(t, "GET", "/calendar?month=2026-11", nil, 200, `channel-airbnb`, `conflict`, catalogs[locale]["conflict"], bPath, `/bookings/1`)
-			page := a.request(t, "GET", bPath, nil, 200, `<fieldset disabled>`, feedServer.URL, catalogs[locale]["source"], catalogs[locale]["cleaning"], `data-cleaning-id=`)
+			page := a.request(t, "GET", bPath, nil, 200, catalogs[locale]["booking_import_notice"], catalogs[locale]["booking_overlap_notice"], feedServer.URL, catalogs[locale]["source"], catalogs[locale]["cleaning"], `data-cleaning-id=`)
+			a.request(t, "GET", bPath+"/edit", nil, 200, `<fieldset disabled>`, catalogs[locale]["booking_import_notice"])
 			if strings.Contains(page, bPath+"/cancel") || strings.Contains(page, bPath+"/restore") {
 				t.Fatal("imported status action visible")
 			}
@@ -149,11 +150,7 @@ func TestM4SyncWarningVisibleAndCanRecover(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.request(t, "POST", syncPath, nil, 303)
-	unit, err := property.GetUnit(t.Context(), a.database, a.unitID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.request(t, "GET", fmt.Sprintf("/properties/%d", unit.PropertyID), nil, 200, catalogs[settings.LocaleChinese]["sync_error"], catalogs[settings.LocaleChinese]["empty_feed_warning"])
+	a.request(t, "GET", "/bookings?section=sync", nil, 200, catalogs[settings.LocaleChinese]["sync_error"], catalogs[settings.LocaleChinese]["empty_feed_warning"])
 	body, err = os.ReadFile("../ical/testdata/airbnb.ics")
 	if err != nil {
 		t.Fatal(err)

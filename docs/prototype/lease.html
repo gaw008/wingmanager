@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>市区公寓 A 室 · 租约 · wingmanager（原型）</title>
+<link rel="stylesheet" href="base.css">
+<style>
+.title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.head-actions { display: flex; gap: 10px; align-items: center; position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 15; min-width: 220px; padding: 8px 0; background: var(--bg); border-radius: var(--radius); box-shadow: var(--shadow-panel); display: none; }
+.menu.open { display: block; }
+.menu button { display: block; width: 100%; padding: 12px 18px; border: 0; background: none; text-align: left; font-size: 14px; }
+.menu button:hover { background: var(--surface-muted); }
+.menu hr { border: 0; border-top: 1px solid var(--border-soft); margin: 6px 0; }
+.menu .danger { color: var(--danger); }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; }
+.stats { grid-template-columns: repeat(3, 1fr); margin-bottom: 32px; }
+
+/* 房租时间线：一个月一格 */
+.months { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 32px; }
+.mon { padding: 14px 16px; border-radius: var(--radius); border: 1px solid var(--border-soft); }
+.mon-name { font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mon-amt { margin-top: 6px; font-size: 14px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.mon-bar { height: 4px; border-radius: 2px; background: var(--surface-muted); margin-top: 10px; overflow: hidden; }
+.mon-bar span { display: block; height: 100%; background: var(--success); }
+.mon.partial .mon-bar span { background: var(--warning); }
+.mon.unpaid .mon-bar span { background: var(--danger); }
+.mon.future { border-style: dashed; color: var(--text-muted); }
+
+table.ledger { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ledger th { text-align: left; font-weight: 600; font-size: 13px; color: var(--text-muted); padding: 12px 16px; border-bottom: 1px solid var(--border-soft); }
+.ledger td { padding: 14px 16px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+.ledger tr:last-child td { border-bottom: 0; }
+.ledger tr:hover td { background: #fcfcfc; }
+.ledger .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger .item { display: flex; align-items: center; gap: 12px; }
+.ledger .row-icon { width: 34px; height: 34px; }
+.ledger .row-icon .icon { width: 17px; height: 17px; }
+.ledger .item-sub { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.ledger .item-sub .icon { width: 12px; height: 12px; }
+.ledger .neg { color: var(--success); }
+.ledger tr.voided td { opacity: .45; text-decoration: line-through; }
+.ledger tr.new td { animation: flash 1.6s ease; }
+@keyframes flash { from { background: var(--success-soft); } to { background: transparent; } }
+.ledger .icon-btn { width: 32px; height: 32px; border: 0; }
+
+.side .panel { margin-bottom: 16px; }
+.side h3 { margin-bottom: 14px; }
+.person { display: flex; align-items: center; gap: 12px; }
+.person .avatar { width: 44px; height: 44px; background: #d6dcf3; color: #222; font-size: 15px; }
+.contact { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; font-size: 14px; }
+.contact a { display: flex; align-items: center; gap: 8px; }
+.contact .icon { width: 16px; height: 16px; color: var(--text-muted); }
+.file { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-soft); font-size: 14px; }
+.file:first-of-type { border-top: 0; }
+.file .icon { color: var(--text-muted); }
+.file span { flex: 1; }
+.preview { margin-top: 4px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-muted); font-size: 13px; }
+.preview b { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1024px) { .layout { grid-template-columns: 1fr; } }
+@media (max-width: 743px) {
+  .stats { grid-template-columns: 1fr 1fr; }
+  .stats .stat:first-child { grid-column: 1 / -1; }
+  .months { grid-template-columns: repeat(2, 1fr); }
+  .ledger .bal, .ledger th.bal { display: none; }
+  .ledger td, .ledger th { padding: 12px 10px; }
+  .head-actions .btn-primary { position: fixed; left: 16px; right: 16px; bottom: 76px; z-index: 25; box-shadow: var(--shadow-panel); }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="today.html"><svg class="icon"><use href="icons.svg#logo"/></svg>wingmanager</a>
+    <nav class="nav" aria-label="主导航">
+      <a href="today.html">今天</a>
+      <a href="calendar.html">日历</a>
+      <a href="#">短租</a>
+      <a href="lease.html" aria-current="page">长租</a>
+      <a href="#">账本</a>
+    </nav>
+    <a class="account" href="#" title="设置、房产、联系人"><svg class="icon"><use href="icons.svg#menu"/></svg><span class="avatar">房</span></a>
+  </div>
+</header>
+
+<main>
+  <div class="crumbs"><a href="#">长租</a><span>›</span><span>市区公寓 · A 室</span></div>
+  <div class="page-head">
+    <div>
+      <div class="title-row"><h1>市区公寓 · A 室</h1><span class="badge success">生效中</span><span class="badge danger" id="overdue-badge">逾期 49 天</span></div>
+      <p class="sub">刘一鸣 · 2026 年 8 月 1 日起 · 按月续租 · 每月 1 日收租</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn btn-primary" id="open-pay"><svg class="icon"><use href="icons.svg#plus"/></svg>记一笔收款</button>
+      <button class="icon-btn" id="more" aria-label="更多操作" style="width:46px;height:46px"><svg class="icon"><use href="icons.svg#dots"/></svg></button>
+      <div class="menu" id="menu">
+        <button>记一笔应收（水电、赔偿…）</button>
+        <button>给租客减免</button>
+        <button>用押金抵扣欠款</button>
+        <hr>
+        <button>修改月租（只影响以后的月份）</button>
+        <button>添加租客</button>
+        <hr>
+        <button class="danger">结束租约</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="stats">
+        <div class="stat is-danger"><div class="stat-label">当前欠款</div><div class="stat-value" id="balance">$3,375.00</div><div class="stat-note" id="balance-note">最早一笔未付：9 月 1 日</div></div>
+        <div class="stat"><div class="stat-label">押金持有</div><div class="stat-value">$2,250</div><div class="stat-note">约定 $2,250 · 已收齐</div></div>
+        <div class="stat"><div class="stat-label">月租</div><div class="stat-value">$2,250</div><div class="stat-note">下次应收：11 月 1 日</div></div>
+      </div>
+
+      <section style="margin-bottom:32px">
+        <div class="section-head"><h2>房租</h2><span class="meta">每月 1 日自动生成应收</span></div>
+        <div class="months" id="months"></div>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>账目</h2><span class="meta">按时间倒序 · 余额 = 应收 − 减免 − 收款</span></div>
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" aria-selected="true" data-f="all">全部</button>
+          <button class="tab" role="tab" aria-selected="false" data-f="charge">应收</button>
+          <button class="tab" role="tab" aria-selected="false" data-f="payment">收款</button>
+          <button class="tab" role="tab" aria-selected="false" data-f="deposit">押金</button>
+        </div>
+        <div class="panel" style="overflow-x:auto">
+          <table class="ledger">
+            <thead><tr><th>日期</th><th>项目</th><th class="num">金额</th><th class="num bal">余额</th><th></th></tr></thead>
+            <tbody id="ledger"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <aside class="side">
+      <div class="panel panel-pad">
+        <h3>租客</h3>
+        <div class="person"><span class="avatar">刘</span><div><div style="font-weight:600">刘一鸣</div><div class="meta">2026 年 7 月起的联系人</div></div></div>
+        <div class="contact">
+          <a href="#"><svg class="icon"><use href="icons.svg#phone"/></svg>(626) 555-0148</a>
+          <a href="#"><svg class="icon"><use href="icons.svg#mail"/></svg>yiming.liu@example.com</a>
+        </div>
+      </div>
+      <div class="panel panel-pad">
+        <h3>租约条款</h3>
+        <dl class="kv">
+          <dt>开始</dt><dd>2026-08-01</dd>
+          <dt>结束</dt><dd>按月续租</dd>
+          <dt>月租</dt><dd>$2,250</dd>
+          <dt>收租日</dt><dd>每月 1 日</dd>
+          <dt>押金</dt><dd>$2,250</dd>
+        </dl>
+      </div>
+      <div class="panel panel-pad">
+        <h3>文件</h3>
+        <div class="file"><svg class="icon"><use href="icons.svg#doc"/></svg><span>租约-签字版.pdf</span><span class="meta">1.2 MB</span></div>
+        <div class="file"><svg class="icon"><use href="icons.svg#doc"/></svg><span>入住检查照片.zip</span><span class="meta">8.4 MB</span></div>
+        <button class="btn btn-sm" style="margin-top:12px;width:100%"><svg class="icon"><use href="icons.svg#plus"/></svg>上传文件</button>
+      </div>
+      <div class="panel panel-pad">
+        <h3>备注</h3>
+        <p class="meta" style="margin:0">9 月房租说好分两次付，第二笔未到账。</p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<div class="modal" id="pay" role="dialog" aria-modal="true" aria-labelledby="pay-title">
+  <div class="modal-head"><button class="icon-btn" id="close-pay" aria-label="关闭"><svg class="icon"><use href="icons.svg#x"/></svg></button><span id="pay-title">记一笔收款</span></div>
+  <div class="modal-body">
+    <div class="field-row">
+      <label class="field"><span class="field-label">金额（USD）</span><input class="input" id="amount" inputmode="decimal" value="3375.00"></label>
+      <label class="field"><span class="field-label">收款日期</span><input class="input" type="date" value="2026-10-20"></label>
+    </div>
+    <div class="field"><span class="field-label">付款方式</span>
+      <div class="segmented" id="method"><button aria-pressed="true">Zelle</button><button aria-pressed="false">支票</button><button aria-pressed="false">现金</button><button aria-pressed="false">银行转账</button><button aria-pressed="false">Venmo</button><button aria-pressed="false">其他</button></div>
+    </div>
+    <label class="field"><span class="field-label">备注（可选）</span><input class="input" placeholder="例如：支票号 1024"></label>
+    <div class="preview" id="preview"></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-ghost" id="cancel-pay">取消</button><button class="btn btn-primary" id="save-pay">保存收款</button></div>
+</div>
+
+<nav class="tabbar" aria-label="主导航（手机）">
+  <a href="today.html"><svg class="icon"><use href="icons.svg#sun"/></svg>今天</a>
+  <a href="calendar.html"><svg class="icon"><use href="icons.svg#cal"/></svg>日历</a>
+  <a href="#"><svg class="icon"><use href="icons.svg#bed"/></svg>短租</a>
+  <a href="lease.html" aria-current="page"><svg class="icon"><use href="icons.svg#key"/></svg>长租</a>
+  <a href="#"><svg class="icon"><use href="icons.svg#wallet"/></svg>账本</a>
+</nav>
+
+<script>
+// 原型假数据（单位：分）。正式实现中余额、逾期、先进先出冲抵都由 ledger 包计算，页面只负责显示。
+const RENT = 225000;
+let entries = [
+  { date: "2026-08-01", kind: "deposit_in", title: "收押金", sub: "支票", amount: 225000 },
+  { date: "2026-08-01", kind: "charge", title: "8 月房租", sub: "自动生成", auto: true, amount: RENT, period: "8 月" },
+  { date: "2026-08-02", kind: "payment", title: "收款", sub: "支票", amount: 225000 },
+  { date: "2026-09-01", kind: "charge", title: "9 月房租", sub: "自动生成", auto: true, amount: RENT, period: "9 月" },
+  { date: "2026-09-05", kind: "payment", title: "收款", sub: "Zelle", amount: 112500 },
+  { date: "2026-10-01", kind: "charge", title: "10 月房租", sub: "自动生成", auto: true, amount: RENT, period: "10 月" },
+];
+const money = c => "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const parse = s => Math.round(parseFloat(String(s).replace(/[$,]/g, "")) * 100) || 0;
+const ICON = { charge: ["", "doc"], payment: ["success", "check"], deposit_in: ["", "lock"] };
+
+// 先进先出：收款依次冲抵最早的应收
+function allocate(list) {
+  let paid = list.filter(e => e.kind === "payment").reduce((s, e) => s + e.amount, 0);
+  return list.filter(e => e.kind === "charge").map(c => {
+    const applied = Math.min(paid, c.amount); paid -= applied;
+    return { ...c, paid: applied };
+  });
+}
+function balance(list) {
+  return list.reduce((s, e) => s + (e.kind === "charge" ? e.amount : e.kind === "payment" ? -e.amount : 0), 0);
+}
+function renderMonths() {
+  const months = allocate(entries).map(c => {
+    const state = c.paid === c.amount ? "paid" : c.paid > 0 ? "partial" : "unpaid";
+    const label = { paid: '<span class="badge success">已付清</span>', partial: '<span class="badge warning">部分未付</span>', unpaid: '<span class="badge danger">未付</span>' }[state];
+    return `<div class="mon ${state}"><div class="mon-name">${c.period}${label}</div><div class="mon-amt">${money(c.paid)} / ${money(c.amount)}</div><div class="mon-bar"><span style="width:${Math.max(c.paid / c.amount * 100, state === "unpaid" ? 100 : 0)}%"></span></div></div>`;
+  });
+  months.push(`<div class="mon future"><div class="mon-name">11 月<span class="badge">未到期</span></div><div class="mon-amt">11 月 1 日生成 ${money(RENT)}</div><div class="mon-bar"></div></div>`);
+  document.getElementById("months").innerHTML = months.join("");
+}
+let filter = "all";
+function renderLedger(highlight) {
+  let run = 0;
+  const rows = entries.map(e => {
+    if (e.kind === "charge") run += e.amount;
+    if (e.kind === "payment") run -= e.amount;
+    return { ...e, run };
+  }).reverse().filter(e => filter === "all" || e.kind === filter || (filter === "deposit" && e.kind.startsWith("deposit")));
+  document.getElementById("ledger").innerHTML = rows.map(e => {
+    const [cls, ic] = ICON[e.kind];
+    const sign = e.kind === "payment" ? "−" : e.kind === "charge" ? "+" : "";
+    const sub = e.auto ? `<svg class="icon"><use href="icons.svg#lock"/></svg>自动生成 · 不可作废，改错请用减免` : e.kind === "deposit_in" ? `${e.sub} · 不计入欠款` : e.sub;
+    return `<tr class="${e === highlight ? "new" : ""}"><td style="white-space:nowrap">${e.date.slice(5).replace("-", "/")}</td>
+      <td><div class="item"><span class="row-icon ${cls}"><svg class="icon"><use href="icons.svg#${ic}"/></svg></span><div><div style="font-weight:600">${e.title}</div><div class="item-sub">${sub}</div></div></div></td>
+      <td class="num ${e.kind === "payment" ? "neg" : ""}">${sign}${money(e.amount)}</td>
+      <td class="num bal">${e.kind.startsWith("deposit") ? "—" : money(e.run)}</td>
+      <td class="num"><button class="icon-btn" ${e.auto ? "disabled title='自动生成的房租不能作废'" : "title='作废'"}><svg class="icon"><use href="icons.svg#dots"/></svg></button></td></tr>`;
+  }).join("");
+}
+function renderSummary() {
+  const bal = balance(entries);
+  document.getElementById("balance").textContent = money(bal);
+  const open = allocate(entries).find(c => c.paid < c.amount);
+  const card = document.getElementById("balance").closest(".stat");
+  card.classList.toggle("is-danger", bal > 0);
+  card.classList.toggle("is-success", bal <= 0);
+  document.getElementById("balance-note").textContent = open ? `最早一笔未付：${open.period} 1 日` : "已全部付清 🎉";
+  const badge = document.getElementById("overdue-badge");
+  badge.style.display = open ? "" : "none";
+  if (open) badge.textContent = `逾期 ${{ "8 月": 80, "9 月": 49, "10 月": 19 }[open.period]} 天`; // 原型：今天按 10 月 20 日算
+}
+function renderPreview() {
+  const amt = parse(document.getElementById("amount").value);
+  const after = balance(entries) - amt;
+  let left = amt;
+  const parts = allocate(entries).filter(c => c.paid < c.amount).map(c => {
+    const due = c.amount - c.paid, take = Math.min(left, due); left -= take;
+    return take > 0 ? `${c.period}房租 ${money(take)}` : null;
+  }).filter(Boolean);
+  document.getElementById("preview").innerHTML = amt > 0
+    ? `这笔收款会依次冲抵：${parts.join("，") || "无"}${left > 0 ? `，多出 ${money(left)} 记为预付` : ""}。<br>保存后欠款：<b>${money(Math.max(after, 0))}</b>${after < 0 ? `（预付 ${money(-after)}）` : ""}`
+    : "请输入大于 0 的金额。";
+}
+const scrim = document.getElementById("scrim"), modal = document.getElementById("pay");
+function openPay() { document.getElementById("amount").value = (balance(entries) / 100).toFixed(2); renderPreview(); modal.classList.add("open"); scrim.classList.add("open"); document.getElementById("amount").focus(); }
+function closePay() { modal.classList.remove("open"); scrim.classList.remove("open"); }
+document.getElementById("open-pay").onclick = openPay;
+document.getElementById("close-pay").onclick = closePay;
+document.getElementById("cancel-pay").onclick = closePay;
+scrim.onclick = closePay;
+document.getElementById("amount").oninput = renderPreview;
+document.getElementById("method").addEventListener("click", e => {
+  if (e.target.tagName !== "BUTTON") return;
+  e.currentTarget.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === e.target));
+});
+document.getElementById("save-pay").onclick = () => {
+  const amt = parse(document.getElementById("amount").value);
+  if (amt <= 0) return;
+  const method = document.querySelector("#method [aria-pressed=true]").textContent;
+  const entry = { date: "2026-10-20", kind: "payment", title: "收款", sub: method, amount: amt };
+  entries.push(entry);
+  closePay(); renderMonths(); renderLedger(entry); renderSummary();
+};
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", b === t));
+  filter = t.dataset.f; renderLedger();
+}));
+const menu = document.getElementById("menu");
+document.getElementById("more").onclick = e => { e.stopPropagation(); menu.classList.toggle("open"); };
+document.addEventListener("click", e => { if (!menu.contains(e.target)) menu.classList.remove("open"); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closePay(); menu.classList.remove("open"); } });
+renderMonths(); renderLedger(); renderSummary();
+</script>
+</body>
+</html>

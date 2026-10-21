@@ -252,6 +252,62 @@ func (q *Queries) setBookingStatus(ctx context.Context, arg setBookingStatusPara
 	return err
 }
 
+const todayStays = `-- name: todayStays :many
+SELECT b.id, b.check_in, b.check_out, b.channel, p.name AS property_name, u.name AS unit_name,
+       coalesce(g.name, '') AS guest_name
+FROM bookings b JOIN units u ON u.id = b.unit_id JOIN properties p ON p.id = u.property_id
+LEFT JOIN people g ON g.id = b.guest_id
+WHERE b.status = 'confirmed' AND b.kind = 'stay'
+  AND b.check_out >= ?1 AND b.check_in <= ?2
+ORDER BY b.check_in, b.id
+`
+
+type todayStaysParams struct {
+	Today       string
+	ThroughDate string
+}
+
+type todayStaysRow struct {
+	ID           int64
+	CheckIn      string
+	CheckOut     string
+	Channel      string
+	PropertyName string
+	UnitName     string
+	GuestName    string
+}
+
+func (q *Queries) todayStays(ctx context.Context, arg todayStaysParams) ([]todayStaysRow, error) {
+	rows, err := q.db.QueryContext(ctx, todayStays, arg.Today, arg.ThroughDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []todayStaysRow
+	for rows.Next() {
+		var i todayStaysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CheckIn,
+			&i.CheckOut,
+			&i.Channel,
+			&i.PropertyName,
+			&i.UnitName,
+			&i.GuestName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const turnovers = `-- name: turnovers :many
 SELECT b.id, b.check_in, b.check_out, p.name AS property_name, u.name AS unit_name,
        coalesce(g.name, '') AS guest_name

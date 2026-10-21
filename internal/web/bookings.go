@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gaw008/wingmanager/internal/booking"
 	"github.com/gaw008/wingmanager/internal/civildate"
 	"github.com/gaw008/wingmanager/internal/ical"
-	"github.com/gaw008/wingmanager/internal/lease"
 	"github.com/gaw008/wingmanager/internal/occupancy"
 	"github.com/gaw008/wingmanager/internal/person"
 	"github.com/gaw008/wingmanager/internal/property"
@@ -26,49 +26,28 @@ type bookingRow struct {
 	booking.Booking
 	UnitLabel, GuestName string
 	Conflict             bool
-}
-type calendarDay struct {
-	Date   string
-	Number int
-	Today  bool
-}
-
-// calendarEntry describes occupancy presentation, independent of its source model.
-type calendarEntry struct {
-	ID                                   int64
-	URL, Kind, Channel, Dates, GuestName string
-	Imported, Conflict                   bool
-}
-type calendarCell struct {
-	calendarDay
-	Span      int
-	Occupants []calendarEntry
-	Conflict  bool
-}
-type calendarUnit struct {
-	ID    int64
-	Name  string
-	Cells []calendarCell
-}
-type calendarProperty struct {
-	Name  string
-	Units []calendarUnit
+	State                booking.ViewState
+	Initials             string
 }
 
 // bookingPage holds the booking forms and the calendar derived from existing records.
 type bookingPage struct {
-	Booking                         booking.Booking
-	Cleaning                        *task.Task
-	SourceURL                       string
-	NewGuest                        person.Details
-	BookingRows, Conflicts          []bookingRow
-	UnitChoices                     []unitChoice
-	Kinds, Statuses, Channels       []string
-	UnitFilter                      int64
-	PeriodFilter, StatusFilter      string
-	Month, PreviousMonth, NextMonth string
-	Days                            []calendarDay
-	CalendarProperties              []calendarProperty
+	Booking                    booking.Booking
+	BookingReadOnly            bool
+	BookingDetail              bookingRow
+	BookingTab, BookingSection string
+	BookingTabs                []reservationTab
+	Cleaning                   *task.Task
+	SourceURL                  string
+	NewGuest                   person.Details
+	BookingRows, Conflicts     []bookingRow
+	UnitChoices                []unitChoice
+	Kinds, Statuses, Channels  []string
+	UnitFilter                 int64
+	PeriodFilter, StatusFilter string
+	Calendar                   occupancy.CalendarView
+	CalendarPropertyFilter     int64
+	CalendarMonthLabel         string
 }
 
 func (s *server) registerBookingRoutes(mux *http.ServeMux) {
@@ -118,7 +97,11 @@ func bookingRows(values []booking.Booking, data pageData) []bookingRow {
 }
 
 func (s *server) listBookings(w http.ResponseWriter, r *http.Request) {
-	data := pageData{Page: "bookings"}
+	s.renderBookingList(w, r, pageData{})
+}
+
+func (s *server) renderBookingList(w http.ResponseWriter, r *http.Request, data pageData) {
+	data.Page = "bookings"
 	data.Statuses = booking.Statuses()
 	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
 		s.fail(w, err)
@@ -139,15 +122,54 @@ func (s *server) listBookings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+
+	data.BookingSection = query.Get("section")
+	data.BookingTab = query.Get("tab")
+	if data.BookingTab == "" && data.PeriodFilter == "" && data.StatusFilter == "" {
+		data.BookingTab = booking.ViewUpcoming
+	}
+	for _, tab := range []struct{ key, label string }{{booking.ViewUpcoming, "coming_soon"}, {booking.ViewInHouse, "staying_now"}, {booking.ViewEnded, "booking_ended"}, {booking.ViewCancelled, "cancelled"}} {
+		data.BookingTabs = append(data.BookingTabs, reservationTab{Key: tab.key, Label: tab.label, Selected: tab.key == data.BookingTab})
+	}
 	values, err := booking.List(r.Context(), s.database, booking.Filter{
-		UnitID: data.UnitFilter, Status: data.StatusFilter, Period: data.PeriodFilter, Today: today,
+		UnitID: data.UnitFilter, Status: data.StatusFilter, Period: data.PeriodFilter, View: data.BookingTab, Today: today,
 	})
 	if err != nil {
 		s.bookingResult(w, r, data, err)
 		return
 	}
 	data.BookingRows = bookingRows(values, data)
-	s.render(w, r, data, http.StatusOK)
+	for i := range data.BookingRows {
+		row := &data.BookingRows[i]
+		row.State, err = row.Booking.State(today)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		row.Initials, _ = person.Appearance(row.GuestName)
+	}
+	properties, err := property.List(r.Context(), s.database, true)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	for _, p := range properties {
+		units, err := property.ListUnits(r.Context(), s.database, p.ID, true)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		data.Units = append(data.Units, units...)
+	}
+	if err := s.propertyFeeds(r, &data); err != nil {
+		s.fail(w, err)
+		return
+	}
+	status := http.StatusOK
+	if data.Error != "" {
+		status = http.StatusBadRequest
+	}
+	s.render(w, r, data, status)
 }
 
 func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
@@ -169,6 +191,7 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Page = "edit_booking"
+		data.BookingReadOnly = r.Method == http.MethodGet && !strings.HasSuffix(r.URL.Path, "/edit")
 		data.Cleaning, err = task.CleaningForBooking(r.Context(), s.database, id)
 		if err != nil {
 			s.fail(w, err)
@@ -184,6 +207,25 @@ func (s *server) editBooking(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		data.Booking.Kind, data.Booking.Channel, data.Booking.Status = booking.KindStay, booking.ChannelDirect, booking.StatusConfirmed
+	}
+	if data.BookingReadOnly {
+		today, err := settings.Today(r.Context(), s.database, s.now)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		data.BookingDetail = bookingRows([]booking.Booking{data.Booking}, data)[0]
+		data.BookingDetail.State, err = data.Booking.State(today)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		data.BookingDetail.Initials, _ = person.Appearance(data.BookingDetail.GuestName)
+		data.BookingDetail.Conflict, err = booking.HasConflict(r.Context(), s.database, data.Booking)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
 	}
 	if r.Method == http.MethodGet {
 		if data.Page == "new_booking" {
@@ -314,156 +356,43 @@ func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	start := today.MonthStart()
-	if month := r.URL.Query().Get("month"); month != "" {
-		start, err = civildate.Parse(month + "-01")
+	month := today.MonthStart()
+	if raw := r.URL.Query().Get("month"); raw != "" {
+		month, err = civildate.Parse(raw + "-01")
 		if err != nil {
 			data.Error = "invalid_month"
 			s.render(w, r, data, http.StatusBadRequest)
 			return
 		}
 	}
-	data.Month = start.String()[:7]
-	if start.Year() > 1 || start.Month() > 1 {
-		data.PreviousMonth = start.AddDays(-1).String()[:7]
+	if raw := r.URL.Query().Get("property"); raw != "" {
+		data.CalendarPropertyFilter, err = strconv.ParseInt(raw, 10, 64)
+		if err != nil || data.CalendarPropertyFilter <= 0 {
+			data.Error = "invalid_form"
+			s.render(w, r, data, http.StatusBadRequest)
+			return
+		}
 	}
-	end := start
-	for end.Month() == start.Month() && end.Year() == start.Year() {
-		data.Days = append(data.Days, calendarDay{Date: end.String(), Number: end.Day(), Today: end.Compare(today) == 0})
-		end = end.AddDays(1)
-	}
-	if end.Year() <= 9999 {
-		data.NextMonth = end.String()[:7]
-	}
-	monthRange, err := occupancy.Stay(start, end)
+	data.Properties, err = property.List(r.Context(), s.database, false)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
-	if err := s.contactAndUnitChoices(r.Context(), &data); err != nil {
-		s.fail(w, err)
-		return
-	}
-	values, err := booking.List(r.Context(), s.database, booking.Filter{Status: booking.StatusConfirmed})
+	data.Calendar, err = occupancy.Calendar(r.Context(), s.database, month, today, data.CalendarPropertyFilter)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
-	type occupied struct {
-		row      calendarEntry
-		interval occupancy.Range
-	}
-	byUnit := make(map[int64][]occupied)
-	for _, row := range bookingRows(values, data) {
-		checkIn, err := civildate.Parse(row.CheckIn)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		checkOut, err := civildate.Parse(row.CheckOut)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		interval, err := occupancy.Stay(checkIn, checkOut)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		if interval.Overlaps(monthRange) {
-			byUnit[row.UnitID] = append(byUnit[row.UnitID], occupied{calendarEntry{ID: row.ID, URL: fmt.Sprintf("/bookings/%d", row.ID), Kind: row.Kind, Channel: row.Channel, Dates: row.CheckIn + " → " + row.CheckOut, GuestName: row.GuestName, Imported: row.Imported}, interval})
-		}
-	}
-	leases, err := lease.List(r.Context(), s.database, lease.StatusActive)
+	// Formatting is presentation only; all positions and occupancy rules are in occupancy.
+	config, err := settings.Get(r.Context(), s.database)
 	if err != nil {
 		s.fail(w, err)
 		return
 	}
-	for _, l := range leases {
-		interval, err := lease.Occupancy(l)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		if interval.Overlaps(monthRange) {
-			from, _ := interval.Bounds()
-			byUnit[l.UnitID] = append(byUnit[l.UnitID], occupied{calendarEntry{ID: l.ID, URL: fmt.Sprintf("/leases/%d", l.ID), Kind: "lease", Dates: from.String() + " → " + l.EndsOn}, interval})
-		}
-	}
-	for unitID, items := range byUnit {
-		for i := range items {
-			for j := i + 1; j < len(items); j++ {
-				if items[i].interval.Overlaps(items[j].interval) {
-					items[i].row.Conflict = true
-					items[j].row.Conflict = true
-				}
-			}
-		}
-		byUnit[unitID] = items
-	}
-	properties, err := property.List(r.Context(), s.database, false)
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-	for _, p := range properties {
-		group := calendarProperty{Name: p.Name}
-		units, err := property.ListUnits(r.Context(), s.database, p.ID, false)
-		if err != nil {
-			s.fail(w, err)
-			return
-		}
-		for _, u := range units {
-			row := calendarUnit{ID: u.ID, Name: u.Name}
-			for i := 0; i < len(data.Days); {
-				day := start.AddDays(i)
-				dayRange, err := occupancy.Stay(day, day.AddDays(1))
-				if err != nil {
-					s.fail(w, err)
-					return
-				}
-				cell := calendarCell{calendarDay: data.Days[i], Span: 1}
-				for _, b := range byUnit[u.ID] {
-					if b.interval.Overlaps(dayRange) {
-						cell.Occupants = append(cell.Occupants, b.row)
-					}
-				}
-				cell.Conflict = len(cell.Occupants) > 1
-				// Merge only adjacent days with the same occupants, so overlapping imports
-				// all remain visible and a conflict never hides the second booking.
-				for len(cell.Occupants) > 0 && i+cell.Span < len(data.Days) {
-					next := day.AddDays(cell.Span)
-					nextRange, err := occupancy.Stay(next, next.AddDays(1))
-					if err != nil {
-						s.fail(w, err)
-						return
-					}
-					var nextOccupants []calendarEntry
-					for _, b := range byUnit[u.ID] {
-						if b.interval.Overlaps(nextRange) {
-							nextOccupants = append(nextOccupants, b.row)
-						}
-					}
-					same := len(nextOccupants) == len(cell.Occupants)
-					if same {
-						for j := range nextOccupants {
-							if nextOccupants[j].URL != cell.Occupants[j].URL {
-								same = false
-								break
-							}
-						}
-					}
-					if !same {
-						break
-					}
-					cell.Span++
-				}
-				row.Cells = append(row.Cells, cell)
-				i += cell.Span
-			}
-			group.Units = append(group.Units, row)
-		}
-		data.CalendarProperties = append(data.CalendarProperties, group)
+	if config.Locale == settings.LocaleChinese {
+		data.CalendarMonthLabel = fmt.Sprintf("%d 年 %d 月", month.Year(), month.Month())
+	} else {
+		data.CalendarMonthLabel = month.MidnightUTC().Format("January 2006")
 	}
 	s.render(w, r, data, http.StatusOK)
 }

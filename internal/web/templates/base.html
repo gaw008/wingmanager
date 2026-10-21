@@ -4,34 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{t .Settings.Locale .Page}} · wingmanager</title>
-  <link rel="stylesheet" href="/static/pico-2.0.6.min.css">
-  <link rel="stylesheet" href="/static/calendar.css">
+  <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx-2.0.4.min.js" defer></script>
   <script src="/static/ical.js" defer></script>
+  <script src="/static/app.js" defer></script>
 </head>
-<body>
-  <header class="container">
-    <nav aria-label="wingmanager">
-      <ul><li><strong>wingmanager</strong></li></ul>
-      {{if .SignedIn}}<ul>
-        <li><a href="/">{{t .Settings.Locale "today"}}</a></li>
-        <li><a href="/properties">{{t .Settings.Locale "properties"}}</a></li>
-        <li><a href="/people">{{t .Settings.Locale "people"}}</a></li>
-        <li><a href="/calendar">{{t .Settings.Locale "calendar"}}</a></li>
-        <li><a href="/bookings">{{t .Settings.Locale "bookings"}}</a></li>
-        <li><a href="/leases">{{t .Settings.Locale "leases"}}</a></li>
-<li><a href="/overdue">{{t .Settings.Locale "overdue"}}</a></li>
-<li><a href="/money">{{t .Settings.Locale "money"}}</a></li>
-<li><a href="/reports">{{t .Settings.Locale "reports"}}</a></li>
-<li><a href="/tasks">{{t .Settings.Locale "tasks"}}</a></li>
-<li><a href="/settings">{{t .Settings.Locale "settings"}}</a></li>
-        <li><form method="post" action="/logout"><button type="submit" class="outline">{{t .Settings.Locale "logout"}}</button></form></li>
-      </ul>{{end}}
-    </nav>
-  </header>
-  <main class="container">
-    <h1>{{t .Settings.Locale .Page}}</h1>
-    {{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+<body class="page-{{.Page}}">
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#logo"/></svg>wingmanager</a>
+    {{if .SignedIn}}
+    <nav class="nav" aria-label="{{t .Settings.Locale "primary_navigation"}}">{{template "nav_links" .}}</nav>
+    <details class="account-menu">
+      <summary class="account" aria-label="{{t .Settings.Locale "account_menu"}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#menu"/></svg><span class="avatar">{{.AccountInitial}}</span></summary>
+      <div class="menu">
+        <a href="/properties">{{t .Settings.Locale "properties_units"}}</a>
+        <a href="/people">{{t .Settings.Locale "people"}}</a>
+        <a href="/tasks">{{t .Settings.Locale "tasks"}}</a>
+        <a href="/settings">{{t .Settings.Locale "settings"}}</a>
+        <form method="post" action="/logout"><button type="submit">{{t .Settings.Locale "logout"}}</button></form>
+      </div>
+    </details>{{end}}
+  </div>
+</header>
+<main>
+
+    {{if and .Error (ne .Page "login") (ne .Page "setup")}}<p class="notice danger" role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+    {{template "page_content" .}}
+</main>
+{{if .SignedIn}}
+<div class="modal" id="action-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1" hidden inert><div id="modal-content"></div></div>
+{{end}}
+{{template "overlays" .}}
+</body></html>{{end}}
+{{define "page_content"}}
+ {{if eq .Page "not_found"}}<div class="page-head"><h1>{{t .Settings.Locale "not_found"}}</h1><a class="btn" href="/">{{t .Settings.Locale "back"}}</a></div>{{end}}
     {{if eq .Page "today"}}{{template "today" .}}{{end}}
     {{if eq .Page "setup"}}{{template "setup" .}}{{end}}
     {{if eq .Page "login"}}{{template "login" .}}{{end}}
@@ -47,6 +54,8 @@
     {{if or (eq .Page "leases") (eq .Page "overdue")}}{{template "leases" .}}{{end}}
     {{if eq .Page "new_lease"}}{{template "new_lease" .}}{{end}}
     {{if eq .Page "lease_detail"}}{{template "lease_detail" .}}{{end}}
+    {{if eq .Page "lease_action"}}{{template "lease_action" .}}{{end}}
+    {{if eq .Page "void_entry"}}{{template "void_form" .}}{{end}}
     {{if eq .Page "money"}}{{template "money_entries" .}}{{end}}
     {{if or (eq .Page "add_expense") (eq .Page "add_income")}}{{template "money_form" .}}{{end}}
     {{if eq .Page "reports"}}{{template "money_report" .}}{{end}}
@@ -56,7 +65,31 @@
     {{if eq .Page "person_detail"}}{{template "person_detail" .}}{{end}}
     {{if eq .Page "money_detail"}}{{template "money_detail" .}}{{end}}
     {{if eq .Page "document_error"}}{{template "document_error" .}}{{end}}
-    {{if .DocumentPanel.UploadPath}}{{template "documents" .DocumentPanel}}{{end}}
-  </main>
-</body>
-</html>{{end}}
+    {{if and .DocumentPanel.UploadPath (ne .Page "lease_detail")}}{{template "documents" .DocumentPanel}}{{end}}
+{{end}}
+{{define "overlays"}}
+
+{{if .SignedIn}}
+<nav class="tabbar" aria-label="{{t .Settings.Locale "mobile_navigation"}}">{{template "nav_links" .}}</nav>
+<div class="scrim" id="scrim" data-close-overlay hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" tabindex="-1" hidden inert>
+  <div class="drawer-head"><h3 id="drawer-title">{{t .Settings.Locale "booking_label"}}</h3><button type="button" class="icon-btn" data-close-overlay aria-label="{{t .Settings.Locale "close"}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#x"/></svg></button></div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+{{end}}
+{{end}}
+{{define "nav_links"}}
+{{range .Navigation}}<a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"/></svg>{{t $.Settings.Locale .Key}}</a>{{end}}
+{{end}}
+{{define "booking_drawer"}}
+{{if .Error}}<p role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+{{template "booking_content" .}}
+{{end}}
+
+{{define "modal_content"}}
+<div class="modal-head"><h2 id="modal-title">{{if eq .Page "lease_action"}}{{t .Settings.Locale .LeaseActionTitle}}{{else}}{{t .Settings.Locale .Page}}{{end}}</h2><button type="button" class="icon-btn" data-close-overlay aria-label="{{t .Settings.Locale "close"}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#x"/></svg></button></div>
+<div class="modal-body" hx-boost="true" hx-target="#modal-content" hx-swap="innerHTML">
+{{if .Error}}<p class="notice danger" role="alert">{{t .Settings.Locale .Error}}</p>{{end}}
+{{template "page_content" .}}
+</div>
+{{end}}

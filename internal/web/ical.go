@@ -3,7 +3,6 @@ package web
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -54,17 +53,18 @@ func (s *server) addFeed(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r)
 		return
 	}
-	unit, err := property.GetUnit(r.Context(), s.database, id)
+	_, err = property.GetUnit(r.Context(), s.database, id)
 	if err != nil {
 		s.renderDomainResult(w, r, pageData{}, err)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		s.renderPropertyDetail(w, r, unit.PropertyID, pageData{Error: "invalid_form"}, nil)
+		r.URL.RawQuery = "section=sync"
+		s.renderBookingList(w, r, pageData{Error: "invalid_form"})
 		return
 	}
 	_, err = ical.Add(r.Context(), s.database, id, r.PostForm.Get("channel"), r.PostForm.Get("url"))
-	s.feedResult(w, r, unit.PropertyID, err)
+	s.feedResult(w, r, err)
 }
 
 func (s *server) changeFeed(w http.ResponseWriter, r *http.Request, action string) {
@@ -82,7 +82,7 @@ func (s *server) changeFeed(w http.ResponseWriter, r *http.Request, action strin
 		s.fail(w, err)
 		return
 	}
-	unit, err := property.GetUnit(r.Context(), s.database, feed.UnitID)
+	_, err = property.GetUnit(r.Context(), s.database, feed.UnitID)
 	if err != nil {
 		s.renderDomainResult(w, r, pageData{}, err)
 		return
@@ -90,7 +90,8 @@ func (s *server) changeFeed(w http.ResponseWriter, r *http.Request, action strin
 	switch action {
 	case "edit":
 		if err := r.ParseForm(); err != nil {
-			s.renderPropertyDetail(w, r, unit.PropertyID, pageData{Error: "invalid_form"}, nil)
+			r.URL.RawQuery = "section=sync"
+			s.renderBookingList(w, r, pageData{Error: "invalid_form"})
 			return
 		}
 		err = ical.Edit(r.Context(), s.database, id, r.PostForm.Get("channel"), r.PostForm.Get("url"))
@@ -102,13 +103,13 @@ func (s *server) changeFeed(w http.ResponseWriter, r *http.Request, action strin
 			log.Printf("sync feed %d: %v", id, err)
 		}
 		// Sync failures and warnings are persisted on the feed and shown after redirect.
-		http.Redirect(w, r, fmt.Sprintf("/properties/%d", unit.PropertyID), http.StatusSeeOther)
+		http.Redirect(w, r, "/bookings?section=sync", http.StatusSeeOther)
 		return
 	}
-	s.feedResult(w, r, unit.PropertyID, err)
+	s.feedResult(w, r, err)
 }
 
-func (s *server) feedResult(w http.ResponseWriter, r *http.Request, propertyID int64, err error) {
+func (s *server) feedResult(w http.ResponseWriter, r *http.Request, err error) {
 	if err != nil {
 		if errors.Is(err, ical.ErrNotFound) {
 			s.notFound(w, r)
@@ -124,10 +125,11 @@ func (s *server) feedResult(w http.ResponseWriter, r *http.Request, propertyID i
 			s.fail(w, err)
 			return
 		}
-		s.renderPropertyDetail(w, r, propertyID, data, nil)
+		r.URL.RawQuery = "section=sync"
+		s.renderBookingList(w, r, data)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/properties/%d", propertyID), http.StatusSeeOther)
+	http.Redirect(w, r, "/bookings?section=sync", http.StatusSeeOther)
 }
 
 func (s *server) exportCalendar(w http.ResponseWriter, r *http.Request) {

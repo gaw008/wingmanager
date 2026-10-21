@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日历 · wingmanager（原型）</title>
+<link rel="stylesheet" href="base.css">
+<style>
+.cal-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.month { display: flex; align-items: center; gap: 12px; }
+.month h1 { font-size: 28px; min-width: 150px; }
+.toolbar-right { display: flex; align-items: center; gap: 12px; }
+.toolbar-right .select { width: auto; padding: 10px 14px; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; font-size: 14px; color: var(--text-muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 26px; height: 14px; border-radius: 999px; display: inline-block; }
+.sw.stay { background: #222; }
+.sw.block { background: repeating-linear-gradient(135deg, #e4e4e4 0 4px, #f4f4f4 4px 8px); border: 1px solid var(--border); }
+.sw.lease { background: var(--success-soft); border: 1px solid #b9dfc6; border-radius: 4px; }
+.sw.conflict { background: #fff; border: 2px solid var(--danger); }
+.conflict-banner { display: flex; align-items: center; gap: 14px; padding: 14px 18px; margin-bottom: 20px; border: 1px solid #f3c9bd; background: var(--danger-soft); border-radius: var(--radius); }
+.conflict-banner .icon { color: var(--danger); }
+.conflict-banner div { flex: 1; font-size: 14px; }
+
+/* 日历网格：每天拆成两个半格，订单从入住日中午画到退房日中午，同日交接自然相接不重叠 */
+.cal-wrap { --unitw: 200px; overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--radius); scroll-behavior: smooth; }
+.cal { min-width: calc(var(--unitw) + 62 * 15px); }
+.cal-row { display: grid; grid-template-columns: var(--unitw) repeat(62, minmax(15px, 1fr)); border-top: 1px solid var(--border-soft); position: relative; }
+.cal-row.head { border-top: 0; position: sticky; top: 0; z-index: 4; background: var(--bg); }
+.cal-row.group { background: var(--surface-muted); }
+.group-label { grid-column: 1 / -1; padding: 8px 16px; font-size: 13px; font-weight: 600; color: var(--text-muted); position: sticky; left: 0; }
+.unit-cell { grid-column: 1; grid-row: 1 / -1; position: sticky; left: 0; z-index: 3; background: var(--bg); display: flex; align-items: center; gap: 10px; padding: 0 16px; border-right: 1px solid var(--border-soft); }
+.unit-thumb { flex: none; width: 34px; height: 34px; border-radius: 8px; }
+.unit-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unit-kind { font-size: 12px; color: var(--text-muted); }
+.day-head { grid-column: span 2; text-align: center; padding: 10px 0 8px; font-size: 12px; color: var(--text-muted); border-left: 1px solid transparent; }
+.day-head b { display: block; margin-top: 2px; font-size: 14px; color: var(--text); font-weight: 500; }
+.day-head.weekend { background: #fafafa; }
+.day-head.today b { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 600; }
+.day-cell { grid-column: span 2; grid-row: 1 / -1; border-left: 1px solid var(--border-soft); cursor: pointer; transition: background .12s; }
+.day-cell.weekend { background: #fafafa; }
+.day-cell.today { background: var(--accent-soft); }
+.day-cell.past { background-image: linear-gradient(rgba(255,255,255,.55), rgba(255,255,255,.55)); }
+.day-cell:hover { background: #f0f0f0; }
+.day-cell:hover::after { content: "+"; display: grid; place-items: center; height: 100%; color: var(--text-muted); font-size: 18px; }
+.bar { z-index: 2; align-self: center; height: 32px; margin: 0 1px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 5px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer; border: 0; text-align: left; transition: box-shadow .15s, transform .15s; }
+.bar:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+.bar span.n { overflow: hidden; text-overflow: ellipsis; }
+.bar .mini { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: #222; }
+/* 渠道用头像外圈颜色表示，色条里留给客人姓名 */
+.bar .mini { box-shadow: 0 0 0 2px #222, 0 0 0 4px transparent; }
+.bar .mini.airbnb { box-shadow: 0 0 0 2px var(--accent); }
+.bar .mini.vrbo { box-shadow: 0 0 0 2px #7d9cf0; }
+.bar .mini.direct { box-shadow: 0 0 0 2px #5fc48a; }
+.bar.stay { background: #222; color: #fff; }
+.bar.block { background: repeating-linear-gradient(135deg, #e4e4e4 0 6px, #f4f4f4 6px 12px); color: var(--text-muted); padding-left: 12px; }
+.bar.lease { background: var(--success-soft); color: var(--success); border: 1px solid #b9dfc6; border-radius: 8px; padding-left: 14px; }
+.bar.past { opacity: .5; }
+.bar.cut-left { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: 0; }
+.bar.cut-right { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: 0; }
+.bar.conflict { box-shadow: 0 0 0 2px var(--danger); }
+.bar.conflict .icon { width: 14px; height: 14px; color: #ffb4a3; flex: none; }
+
+.drawer .guest-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.drawer .guest-head .avatar { width: 56px; height: 56px; font-size: 18px; }
+.drawer .guest-name { font-size: 22px; font-weight: 600; }
+.notice { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-muted); font-size: 13px; color: var(--text-muted); margin: 20px 0; }
+.notice .icon { width: 16px; height: 16px; margin-top: 1px; }
+.notice.danger { background: var(--danger-soft); color: var(--danger); }
+
+@media (max-width: 743px) {
+  .cal-wrap { --unitw: 116px; margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
+  .unit-thumb { display: none; }
+  .unit-cell { padding: 0 10px; }
+  .month h1 { font-size: 22px; min-width: 0; }
+  .toolbar-right .select { display: none; }
+  .conflict-banner { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="today.html"><svg class="icon"><use href="icons.svg#logo"/></svg>wingmanager</a>
+    <nav class="nav" aria-label="主导航">
+      <a href="today.html">今天</a>
+      <a href="calendar.html" aria-current="page">日历</a>
+      <a href="#">短租</a>
+      <a href="lease.html">长租</a>
+      <a href="#">账本</a>
+    </nav>
+    <a class="account" href="#" title="设置、房产、联系人"><svg class="icon"><use href="icons.svg#menu"/></svg><span class="avatar">房</span></a>
+  </div>
+</header>
+
+<main>
+  <div class="cal-toolbar">
+    <div class="month">
+      <button class="icon-btn" aria-label="上个月"><svg class="icon"><use href="icons.svg#left"/></svg></button>
+      <h1>2026 年 10 月</h1>
+      <button class="icon-btn" aria-label="下个月"><svg class="icon"><use href="icons.svg#right"/></svg></button>
+      <button class="btn btn-sm" id="go-today">今天</button>
+    </div>
+    <div class="toolbar-right">
+      <select class="select" aria-label="筛选房产"><option>全部房产</option><option>湖边小屋</option><option>市区公寓</option></select>
+      <button class="btn btn-primary btn-sm" id="new-booking"><svg class="icon"><use href="icons.svg#plus"/></svg>新建订单</button>
+    </div>
+  </div>
+
+  <div class="conflict-banner">
+    <svg class="icon"><use href="icons.svg#alert"/></svg>
+    <div><b>1 处订单冲突</b> · 湖边小屋 · 后院 ADU，10 月 24–25 日：Airbnb 与 VRBO 都确认了订单。需要在其中一个平台取消。</div>
+    <button class="btn btn-sm" id="show-conflict">查看</button>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw stay"></i>短租入住</span>
+    <span><i class="sw block"></i>日历屏蔽</span>
+    <span><i class="sw lease"></i>长租租约</span>
+    <span><i class="sw conflict"></i>冲突</span>
+    <span>头像外圈：<b style="color:var(--accent)">Airbnb</b> · <b style="color:#5578e0">VRBO</b> · <b style="color:var(--success)">直订</b></span>
+    <span>点空白格新建 · 点色条查看</span>
+  </div>
+
+  <div class="cal-wrap" id="cal-wrap"><div class="cal" id="cal"></div></div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head"><h3 id="drawer-title">订单</h3><button class="icon-btn" id="drawer-close" aria-label="关闭"><svg class="icon"><use href="icons.svg#x"/></svg></button></div>
+  <div class="drawer-body" id="drawer-body"></div>
+  <div class="drawer-foot" id="drawer-foot"></div>
+</aside>
+
+<nav class="tabbar" aria-label="主导航（手机）">
+  <a href="today.html"><svg class="icon"><use href="icons.svg#sun"/></svg>今天</a>
+  <a href="calendar.html" aria-current="page"><svg class="icon"><use href="icons.svg#cal"/></svg>日历</a>
+  <a href="#"><svg class="icon"><use href="icons.svg#bed"/></svg>短租</a>
+  <a href="lease.html"><svg class="icon"><use href="icons.svg#key"/></svg>长租</a>
+  <a href="#"><svg class="icon"><use href="icons.svg#wallet"/></svg>账本</a>
+</nav>
+
+<script>
+// 原型假数据：2026 年 10 月，今天 = 20 日。正式实现由服务端算好位置后渲染。
+const YEAR = 2026, MONTH = 10, DAYS = 31, TODAY = 20;
+const CH = { airbnb: "Airbnb", vrbo: "VRBO", direct: "直订", booking: "Booking" };
+const properties = [
+  { name: "湖边小屋", units: [
+    { id: "lake", name: "整套", kind: "短租 · 2 个日历源", thumb: "#cfe3d4", items: [
+      { type: "stay", guest: "Mia Lopez", ini: "ML", color: "#f6c98b", in: 2, out: 5, ch: "airbnb", imported: true },
+      { type: "block", label: "已屏蔽 · 自用", in: 9, out: 12 },
+      { type: "stay", guest: "Emily Chen", ini: "EC", color: "#f3a6b4", in: 17, out: 20, ch: "airbnb", imported: true, task: "保洁 · 今天 · 阿芳" },
+      { type: "stay", guest: "王小明", ini: "王", color: "#9cc7f2", in: 20, out: 23, ch: "direct", imported: false, task: "保洁 · 10 月 23 日" },
+      { type: "stay", guest: "Sarah Johnson", ini: "SJ", color: "#c9b6f2", in: 25, out: 27, ch: "vrbo", imported: true, task: "保洁 · 10 月 27 日" },
+    ]},
+    { id: "adu", name: "后院 ADU", kind: "短租 · 2 个日历源", thumb: "#e7d9c4", items: [
+      { type: "stay", guest: "Leo Wang", ini: "LW", color: "#a7d8de", in: 22, out: 25, ch: "airbnb", imported: true, conflict: true },
+      { type: "stay", guest: "Grace Liu", ini: "GL", color: "#f2b8a2", in: 24, out: 27, ch: "vrbo", imported: true, conflict: true },
+      { type: "stay", guest: "Daniel Park", ini: "DP", color: "#c9b6f2", in: 28, out: 33, ch: "airbnb", imported: true }
+    ,
+    ]},
+  ]},
+  { name: "市区公寓", units: [
+    { id: "a", name: "A 室", kind: "长租", thumb: "#d6dcf3", items: [
+      { type: "lease", label: "刘一鸣 · 长租 · $2,250/月 · 逾期", in: -60, out: 99, href: "lease.html" },
+    ]},
+    { id: "b", name: "B 室", kind: "空置", thumb: "#eeeeee", items: [] },
+  ]},
+];
+const weekday = d => new Date(YEAR, MONTH - 1, d).getDay();
+const isWeekend = d => [0, 6].includes(weekday(d));
+const WD = ["日", "一", "二", "三", "四", "五", "六"];
+
+// 同一行里重叠的色条分到不同"泳道"，行高随之增加
+function lanes(items) {
+  const ends = [];
+  items.forEach(it => {
+    let lane = ends.findIndex(end => end <= it.in);
+    if (lane === -1) { lane = ends.length; ends.push(0); }
+    ends[lane] = it.out;
+    it.lane = lane;
+  });
+  return Math.max(1, ends.length);
+}
+function barHTML(it, pi, ui, ii) {
+  const start = Math.max(2, it.in * 2 + 1), end = Math.min(64, it.out * 2 + 1);
+  const cls = [it.type, it.out < TODAY ? "past" : "", it.in < 1 ? "cut-left" : "", it.out > DAYS ? "cut-right" : "", it.conflict ? "conflict" : ""].join(" ");
+  const style = `grid-column:${start}/${end};grid-row:${it.lane + 1}`;
+  if (it.type === "stay") {
+    return `<button class="bar ${cls}" style="${style}" data-k="${pi}.${ui}.${ii}" title="${it.guest} · ${CH[it.ch]}"><span class="mini ${it.ch}" style="background:${it.color}">${it.ini}</span>${it.conflict ? '<svg class="icon"><use href="icons.svg#alert"/></svg>' : ""}<span class="n">${it.guest}</span></button>`;
+  }
+  return `<button class="bar ${cls}" style="${style}" data-k="${pi}.${ui}.${ii}" title="${it.label}"><span class="n">${it.label}</span></button>`;
+}
+function render() {
+  let html = `<div class="cal-row head"><div class="unit-cell" style="font-size:13px;color:var(--text-muted)">单元</div>`;
+  for (let d = 1; d <= DAYS; d++) {
+    html += `<div class="day-head ${isWeekend(d) ? "weekend" : ""} ${d === TODAY ? "today" : ""}" ${d === TODAY ? 'id="today-col"' : ""}>${WD[weekday(d)]}<b>${d}</b></div>`;
+  }
+  html += `</div>`;
+  properties.forEach((p, pi) => {
+    html += `<div class="cal-row group"><div class="group-label">${p.name}</div></div>`;
+    p.units.forEach((u, ui) => {
+      const n = lanes(u.items);
+      html += `<div class="cal-row" style="grid-template-rows:repeat(${n}, 40px);padding:6px 0">`;
+      html += `<div class="unit-cell"><span class="unit-thumb" style="background:${u.thumb}"></span><div style="min-width:0"><div class="unit-name">${u.name}</div><div class="unit-kind">${u.kind}</div></div></div>`;
+      for (let d = 1; d <= DAYS; d++) {
+        html += `<div class="day-cell ${isWeekend(d) ? "weekend" : ""} ${d === TODAY ? "today" : ""} ${d < TODAY ? "past" : ""}" style="grid-column:${2 * d}/span 2" data-unit="${p.name} · ${u.name}" data-day="${d}"></div>`;
+      }
+      u.items.forEach((it, ii) => { html += barHTML(it, pi, ui, ii); });
+      html += `</div>`;
+    });
+  });
+  document.getElementById("cal").innerHTML = html;
+}
+
+const drawer = document.getElementById("drawer"), scrim = document.getElementById("scrim");
+const fmt = d => d > DAYS ? `11 月 ${d - DAYS} 日` : `10 月 ${d} 日`;
+function openDrawer(title, body, foot) {
+  document.getElementById("drawer-title").textContent = title;
+  document.getElementById("drawer-body").innerHTML = body;
+  document.getElementById("drawer-foot").innerHTML = foot;
+  drawer.classList.add("open"); scrim.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
+}
+function closeDrawer() { drawer.classList.remove("open"); scrim.classList.remove("open"); drawer.setAttribute("aria-hidden", "true"); }
+function showBooking(it, unit) {
+  if (it.type === "lease") { location.href = it.href; return; }
+  if (it.type === "block") {
+    openDrawer("日历屏蔽", `<dl class="kv"><dt>单元</dt><dd>${unit}</dd><dt>日期</dt><dd>${fmt(it.in)} – ${fmt(it.out)} · ${it.out - it.in} 晚</dd><dt>来源</dt><dd>手动创建</dd><dt>备注</dt><dd>自用</dd></dl>`,
+      `<button class="btn btn-ghost">删除屏蔽</button><button class="btn btn-primary">编辑</button>`);
+    return;
+  }
+  const nights = it.out - it.in;
+  const src = it.imported
+    ? `<div class="notice"><svg class="icon"><use href="icons.svg#lock"/></svg><div>从 ${CH[it.ch]} 日历导入。日期和状态由平台决定，这里只能修改客人信息和备注。</div></div>`
+    : `<div class="notice"><svg class="icon"><use href="icons.svg#check"/></svg><div>手动创建的订单，所有信息都可以修改。</div></div>`;
+  const conflict = it.conflict ? `<div class="notice danger"><svg class="icon"><use href="icons.svg#alert"/></svg><div>和同一单元的另一笔订单日期重叠（10 月 24–25 日）。两个平台都已确认，请在其中一个平台取消，取消后下次同步会自动更新这里。</div></div>` : "";
+  openDrawer("订单详情", `
+    <div class="guest-head"><span class="avatar" style="background:${it.color};color:#222">${it.ini}</span><div><div class="guest-name">${it.guest}</div><span class="chip ${it.ch}">${CH[it.ch]}</span> ${statusBadge(it)}</div></div>
+    ${conflict}
+    <dl class="kv">
+      <dt>单元</dt><dd>${unit}</dd>
+      <dt>入住</dt><dd>${fmt(it.in)}</dd>
+      <dt>退房</dt><dd>${fmt(it.out)}</dd>
+      <dt>晚数</dt><dd>${nights} 晚</dd>
+      <dt>保洁</dt><dd>${it.task || "已完成"}</dd>
+      <dt>备注</dt><dd style="color:var(--text-muted)">暂无</dd>
+    </dl>
+    ${src}`,
+    it.imported ? `<span></span><button class="btn btn-primary">编辑客人与备注</button>` : `<button class="btn btn-ghost">取消订单</button><button class="btn btn-primary">编辑订单</button>`);
+}
+function statusBadge(it) {
+  if (it.out < TODAY) return '<span class="badge">已退房</span>';
+  if (it.out === TODAY) return '<span class="badge warning">今天退房</span>';
+  if (it.in === TODAY) return '<span class="badge success">今天入住</span>';
+  if (it.in < TODAY) return '<span class="badge success">入住中</span>';
+  return '<span class="badge success">已确认</span>';
+}
+function showNew(unit, day) {
+  openDrawer("新建订单", `
+    <div class="field"><span class="field-label">类型</span><div class="segmented"><button aria-pressed="true">短租入住</button><button aria-pressed="false">日历屏蔽</button></div></div>
+    <label class="field"><span class="field-label">单元</span><select class="select"><option>${unit || "湖边小屋 · 整套"}</option><option>湖边小屋 · 后院 ADU</option></select></label>
+    <div class="field-row">
+      <label class="field"><span class="field-label">入住</span><input class="input" type="date" value="2026-10-${String(day || 21).padStart(2, "0")}"></label>
+      <label class="field"><span class="field-label">退房</span><input class="input" type="date" value="2026-10-${String((day || 21) + 2).padStart(2, "0")}"></label>
+    </div>
+    <label class="field"><span class="field-label">客人</span><input class="input" placeholder="搜索联系人，或输入新客人姓名"></label>
+    <div class="field"><span class="field-label">渠道</span><div class="segmented"><button aria-pressed="true">直订</button><button aria-pressed="false">Airbnb</button><button aria-pressed="false">VRBO</button><button aria-pressed="false">其他</button></div></div>
+    <div class="notice"><svg class="icon"><use href="icons.svg#broom"/></svg><div>保存后会在退房日自动生成保洁任务。</div></div>`,
+    `<button class="btn btn-ghost" onclick="closeDrawer()">取消</button><button class="btn btn-primary">保存订单</button>`);
+  document.querySelectorAll(".segmented").forEach(g => g.addEventListener("click", e => {
+    if (e.target.tagName !== "BUTTON") return;
+    g.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === e.target));
+  }));
+}
+document.addEventListener("click", e => {
+  const bar = e.target.closest(".bar");
+  if (bar) {
+    const [pi, ui, ii] = bar.dataset.k.split(".").map(Number);
+    const p = properties[pi], u = p.units[ui];
+    showBooking(u.items[ii], `${p.name} · ${u.name}`);
+    return;
+  }
+  const cell = e.target.closest(".day-cell");
+  if (cell) showNew(cell.dataset.unit, Number(cell.dataset.day));
+});
+document.getElementById("new-booking").onclick = () => showNew();
+document.getElementById("show-conflict").onclick = () => showBooking(properties[0].units[1].items[1], "湖边小屋 · 后院 ADU");
+document.getElementById("drawer-close").onclick = closeDrawer;
+scrim.onclick = closeDrawer;
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+function scrollToToday() {
+  const wrap = document.getElementById("cal-wrap"), col = document.getElementById("today-col");
+  const unitw = parseFloat(getComputedStyle(wrap).getPropertyValue("--unitw"));
+  wrap.scrollLeft = col.offsetLeft - unitw - 2 * col.offsetWidth;
+}
+document.getElementById("go-today").onclick = scrollToToday;
+render();
+scrollToToday();
+</script>
+</body>
+</html>

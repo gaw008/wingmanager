@@ -45,3 +45,25 @@ func Get(ctx context.Context, database *sql.DB, id int64) (Entry, error) {
 	}
 	return fromRecord(value), err
 }
+
+// OverdueSummary aggregates the same FIFO debt shown on each lease. Joint
+// tenants count once because rent and the oldest unpaid charge belong to a lease.
+type OverdueSummary struct {
+	Leases         []OverdueLease
+	TotalCents     int64
+	Count, MaxDays int
+}
+
+// OverdueTotals returns debt, lease count, and maximum age using the lease balances.
+func OverdueTotals(ctx context.Context, database *sql.DB, today civildate.Date) (OverdueSummary, error) {
+	values, err := Overdue(ctx, database, today)
+	if err != nil {
+		return OverdueSummary{}, err
+	}
+	result := OverdueSummary{Leases: values, Count: len(values)}
+	for _, v := range values {
+		result.TotalCents += v.BalanceCents
+		result.MaxDays = max(result.MaxDays, v.DaysOverdue)
+	}
+	return result, nil
+}

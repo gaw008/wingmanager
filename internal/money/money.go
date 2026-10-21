@@ -66,3 +66,44 @@ func Format(cents int64) string {
 	}
 	return fmt.Sprintf("%s%d.%02d", sign, whole, fraction)
 }
+
+// FormatCurrency renders a display amount with a currency symbol and grouped
+// thousands. JPY rounds to whole yen, half away from zero; other currencies keep
+// two decimals. CSV and form values must use Format instead.
+func FormatCurrency(currency string, cents int64) string {
+	amount := Format(cents)
+	if currency == "JPY" {
+		whole := cents / 100
+		if cents%100 >= 50 {
+			whole++
+		} else if cents%100 <= -50 {
+			whole--
+		}
+		amount = strconv.FormatInt(whole, 10)
+	}
+	sign := ""
+	if strings.HasPrefix(amount, "-") {
+		sign, amount = "-", amount[1:]
+	}
+	parts := strings.SplitN(amount, ".", 2)
+	whole := parts[0]
+	first := len(whole) % 3
+	if first == 0 {
+		first = 3
+	}
+	var grouped strings.Builder
+	grouped.WriteString(whole[:first])
+	for i := first; i < len(whole); i += 3 {
+		grouped.WriteByte(',')
+		grouped.WriteString(whole[i : i+3])
+	}
+	if len(parts) == 2 {
+		grouped.WriteByte('.')
+		grouped.WriteString(parts[1])
+	}
+	symbol := map[string]string{"USD": "$", "EUR": "€", "GBP": "£", "CNY": "¥", "JPY": "¥", "CAD": "$", "AUD": "$"}[currency]
+	if symbol == "" {
+		return sign + grouped.String() + " " + currency
+	}
+	return sign + symbol + grouped.String()
+}

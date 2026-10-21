@@ -41,3 +41,13 @@ WHERE id = sqlc.arg(id);
 
 -- name: regenerateToken :one
 UPDATE units SET ical_export_token = ? WHERE id = ? RETURNING ical_export_token;
+
+-- name: vacantUnits :many
+SELECT u.id, p.name AS property_name, u.name AS unit_name
+FROM units u JOIN properties p ON p.id = u.property_id
+WHERE u.archived_at IS NULL AND p.archived_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM leases l WHERE l.unit_id = u.id AND l.status = 'active'
+      AND l.starts_on <= sqlc.arg(today) AND (l.ends_on IS NULL OR l.ends_on >= sqlc.arg(today)))
+  AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.unit_id = u.id AND b.status = 'confirmed'
+      AND b.check_in <= sqlc.arg(today) AND b.check_out > sqlc.arg(today))
+ORDER BY p.name, p.id, u.name, u.id;

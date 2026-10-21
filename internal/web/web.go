@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -47,20 +48,26 @@ type Config struct {
 }
 
 type pageData struct {
-	Page          string
-	Settings      settings.Settings
-	Locales       []string
-	SignedIn      bool
-	Error         string
-	Properties    []property.Property
-	Property      property.Property
-	Units         []property.Unit
-	People        []person.Person
-	Person        person.Person
-	FirstUnitName string
-	UnitName      string
-	ShowArchived  bool
-	Search        string
+	DisplayYear    int
+	Modal          bool
+	FormAction     string
+	FormValues     url.Values
+	Navigation     []navigationItem
+	AccountInitial string
+	Page           string
+	Settings       settings.Settings
+	Locales        []string
+	SignedIn       bool
+	Error          string
+	Properties     []property.Property
+	Property       property.Property
+	Units          []property.Unit
+	People         []person.Person
+	Person         person.Person
+	FirstUnitName  string
+	UnitName       string
+	ShowArchived   bool
+	Search         string
 	bookingPage
 	feedPage
 	leasePage
@@ -80,8 +87,11 @@ func New(database *sql.DB, service *ical.Service, config Config) (http.Handler, 
 
 func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, config Config) (http.Handler, error) {
 	templates, err := template.New("pages").Funcs(template.FuncMap{
-		"money":           money.Format,
-		"calendarColumns": func(days int) int { return days + 1 },
+		"decimal":    money.Format,
+		"date":       displayDate,
+		"rentDueDay": rentDueDay,
+		"currency":   money.FormatCurrency,
+		"tn":         translateCount,
 		"syncError": func(locale, message string) string {
 			if message == ical.ErrEmptyFeed.Error() {
 				return catalogs[locale]["empty_feed_warning"]
@@ -122,6 +132,10 @@ func newHandler(database *sql.DB, now func() time.Time, service *ical.Service, c
 	s.registerTaskRoutes(mux)
 	s.registerDocumentRoutes(mux)
 	return http.NewCrossOriginProtection().Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("HX-Request") == "true" {
+			w = enhancedResponse{ResponseWriter: w}
+		}
+
 		if strings.HasPrefix(r.URL.Path, "/static/") || strings.HasPrefix(r.URL.Path, "/ical/") {
 			mux.ServeHTTP(w, r)
 			return
@@ -258,9 +272,17 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, s
 		s.fail(w, err)
 		return
 	}
+	location, err := time.LoadLocation(value.Timezone)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	data.DisplayYear = s.now().In(location).Year()
 	data.Settings = value
 	data.Locales = settings.Locales()
 	data.SignedIn = data.Page != "setup" && data.Page != "login"
+	data.Navigation = navigation(data.Page)
+	data.AccountInitial = accountInitial(value.LandlordName, value.Locale)
 	if err := s.loadDocumentPanel(r, &data); err != nil {
 		s.fail(w, err)
 		return
@@ -269,7 +291,22 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, s
 		data.FirstUnitName = catalogs[value.Locale]["default_unit_name"]
 	}
 	var body bytes.Buffer
-	if err := s.templates.ExecuteTemplate(&body, "base", data); err != nil {
+	if data.FormValues == nil {
+		data.FormValues = r.PostForm
+	}
+	data.Modal = r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "modal-content"
+	templateName := "base"
+	w.Header().Add("Vary", "HX-Request, HX-Target")
+	if data.Modal {
+		templateName = "modal_content"
+	}
+	if data.Page == "payment_preview" {
+		templateName = "payment_preview"
+	}
+	if r.Header.Get("HX-Request") == "true" && (r.Header.Get("HX-Target") == "drawer-body" || r.URL.Query().Get("drawer") == "1") && (data.Page == "new_booking" || data.Page == "edit_booking") {
+		templateName = "booking_drawer"
+	}
+	if err := s.templates.ExecuteTemplate(&body, templateName, data); err != nil {
 		s.fail(w, err)
 		return
 	}
@@ -283,4 +320,17 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, data pageData, s
 func (s *server) fail(w http.ResponseWriter, err error) {
 	log.Printf("request failed: %v", err)
 	http.Error(w, "Internal server error", http.StatusInternalServerError)
+}
+
+// Enhanced redirects navigate the whole page after a successful overlay submit.
+// The same handlers keep their ordinary 303 response without htmx.
+type enhancedResponse struct{ http.ResponseWriter }
+
+func (w enhancedResponse) WriteHeader(status int) {
+	if status == http.StatusSeeOther {
+		w.Header().Set("HX-Redirect", w.Header().Get("Location"))
+		w.Header().Del("Location")
+		status = http.StatusOK
+	}
+	w.ResponseWriter.WriteHeader(status)
 }

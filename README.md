@@ -7,9 +7,13 @@ short-term and long-term rentals. One Go binary, SQLite, and an embedded
 Chinese/English web UI; no external database or frontend build is needed.
 
 Today answers: who checks in or out, which tenants owe rent, and how much you
-have earned this year. v0.1 includes manual bookings, iCal import/export,
+have earned this year. It includes manual bookings, iCal import/export,
 leases and rent charges, payments and deposits, cash-basis reports and Schedule E
 CSV, tasks, and attachments. iCal is calendar sync, not two-way channel management.
+
+| Today | Calendar | Lease |
+|---|---|---|
+| ![Today dashboard](docs/screenshots/today-en.jpg) | ![Multi-unit calendar](docs/screenshots/calendar-en.jpg) | ![Lease detail](docs/screenshots/lease-en.jpg) |
 
 ## Download or build
 
